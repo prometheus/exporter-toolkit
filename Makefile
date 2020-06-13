@@ -19,3 +19,8 @@ test:: deps check_license unused common-test
 ifeq (,$(shell echo $(GO_VERSION_NUMBER) | grep -E 'go1\.(7|8|9|10)\.'))
 test:: lint
 endif
+
+.PHONY: assets
+assets:
+	cd web && GO111MODULE=$(GO111MODULE) GOOS= GOARCH= $(GO) generate -x -v $(GOOPTS)
+	@$(GOFMT) -w ./web
