@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>{{.Name}}</title>
+    <style>{{.CSS}}</style>
+  </head>
+  <body>
+    <nav>{{.Name}}</nav>
+    <div class="main">
+      {{if .Description}}<h3>{{.Description}}</h3>{{end}}
+      {{if .Version}}<div>Version: {{.Version}}</div>{{end}}
+      <div><ul>
+        {{ range .Links }}
+        <li><a href="{{ .Address }}">{{.Text}}</a>{{if .Description}}: {{.Description}}{{end}}</li>
+        {{ end }}
+        </ul>
+      </div>
+    </div>
+  </body>
+</html>
