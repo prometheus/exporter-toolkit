@@ -5,13 +5,17 @@ orbs:
   go: circleci/go@0.2.0
 
 jobs:
+  lint:
+    docker:
+    - image: circleci/golang:1.15
+    working_directory: /go/src/github.com/prometheus/exporter-toolkit
+    steps:
+    - checkout
+    - run: make lint
   test:
     parameters:
       go_version:
         type: string
-      run_style:
-        type: boolean
-        default: false
       use_gomod_cache:
         type: boolean
         default: true
@@ -27,10 +31,6 @@ jobs:
             key: v1-go<< parameters.go_version >>
     - run: make test
     - when:
-        condition: << parameters.run_style >>
-        steps:
-        - run: make style
-    - when:
         condition: << parameters.use_gomod_cache >>
         steps:
         - go/save-cache:
@@ -43,11 +43,10 @@ workflows:
   tests:
     jobs:
     # Support the last two go relases, as per https://golang.org/dl/
+    - lint
     - test:
         name: go-1-14
         go_version: "1.14"
     - test:
         name: go-1-15
         go_version: "1.15"
-        # Style is only checked against the latest supported Go version.
-        run_style: true
