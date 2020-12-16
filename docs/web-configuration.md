@@ -1,17 +1,16 @@
-# HTTPS Package for Prometheus
+# Web configuration
 
-The `https` directory contains a Go package and a sample configuration file for
-running `node_exporter` with HTTPS instead of HTTP. We currently support TLS 1.3
-and TLS 1.2.
+Exporters and services instrumented with the Exporter Toolkit share the same
+web configuration file format.
 
-To run a server with TLS, use the flag `--web.config`.
+To run an exporter or service with TLS, use the flag `--web.config`.
 
 e.g. `./node_exporter --web.config="web-config.yml"`
-If the config is kept within the https directory.
 
-The config file should be written in YAML format, and is reloaded on each connection to check for new certificates and/or authentication policy.
+The config file should be written in YAML format, and is reloaded on each
+connection to check for new certificates and/or authentication policy.
 
-## Sample Config
+## Configuration
 
 ```
 tls_server_config:
@@ -62,6 +61,8 @@ http_server_config:
 basic_auth_users:
   [ <string>: <secret> ... ]
 ```
+
+[A sample configuration file](web.yml) is provided.
 
 ## About bcrypt
 
