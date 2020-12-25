@@ -55,19 +55,16 @@ func (u *userAuthRoundtrip) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, pass, ok := r.BasicAuth()
-	if !ok {
-		w.Header().Set("WWW-Authenticate", "Basic")
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-		return
-	}
-
-	if hashedPassword, ok := c.Users[user]; ok {
-		if err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(pass)); err == nil {
-			u.handler.ServeHTTP(w, r)
-			return
+	user, pass, auth := r.BasicAuth()
+	if auth {
+		if hashedPassword, ok := c.Users[user]; ok {
+			if err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(pass)); err == nil {
+				u.handler.ServeHTTP(w, r)
+				return
+			}
 		}
 	}
 
-	http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+	w.Header().Set("WWW-Authenticate", "Basic")
+	http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 }

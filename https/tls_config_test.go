@@ -555,7 +555,7 @@ func TestUsers(t *testing.T) {
 			UseTLSClient:   true,
 			Username:       "dave",
 			Password:       "bad",
-			ExpectedError:  ErrorMap["Forbidden"],
+			ExpectedError:  ErrorMap["Unauthorized"],
 		},
 		{
 			Name:           `with bad username and TLS`,
@@ -563,7 +563,7 @@ func TestUsers(t *testing.T) {
 			UseTLSClient:   true,
 			Username:       "nonexistent",
 			Password:       "nonexistent",
-			ExpectedError:  ErrorMap["Forbidden"],
+			ExpectedError:  ErrorMap["Unauthorized"],
 		},
 	}
 	for _, testInputs := range testTables {
