@@ -21,6 +21,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"path/filepath"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -51,6 +52,13 @@ type TLSStruct struct {
 	PreferServerCipherSuites bool       `yaml:"prefer_server_cipher_suites"`
 }
 
+// SetDirectory joins any relative file paths with dir.
+func (t *TLSStruct) SetDirectory(dir string) {
+	t.TLSCertPath = config_util.JoinDir(dir, t.TLSCertPath)
+	t.TLSKeyPath = config_util.JoinDir(dir, t.TLSKeyPath)
+	t.ClientCAs = config_util.JoinDir(dir, t.ClientCAs)
+}
+
 type HTTPStruct struct {
 	HTTP2 bool `yaml:"http2"`
 }
@@ -69,6 +77,7 @@ func getConfig(configPath string) (*Config, error) {
 		HTTPConfig: HTTPStruct{HTTP2: true},
 	}
 	err = yaml.UnmarshalStrict(content, c)
+	c.TLSConfig.SetDirectory(filepath.Dir(configPath))
 	return c, err
 }
 
@@ -203,6 +212,7 @@ func Serve(l net.Listener, server *http.Server, tlsConfigPath string, logger log
 	if err != nil {
 		return err
 	}
+
 	config, err := ConfigToTLSConfig(&c.TLSConfig)
 	switch err {
 	case nil:

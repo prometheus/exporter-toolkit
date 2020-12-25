@@ -1,6 +1,6 @@
 tls_server_config :
-  cert_file : "testdata/server.crt"
-  key_file : "testdata/server.key"
+  cert_file : "server.crt"
+  key_file : "server.key"
 basic_auth_users:
   alice: $2y$12$1DpfPeqF9HzHJt.EWswy1exHluGfbhnn3yXhR7Xes6m3WJqFg0Wby
   bob: $2y$18$4VeFDzXIoPHKnKTU3O3GH.N.vZu06CVqczYZ8WvfzrddFU6tGqjR.
