@@ -375,8 +375,7 @@ func (test *TestInputs) Test(t *testing.T) {
 		}
 	}()
 
-	var server *http.Server
-	server = &http.Server{
+	server := &http.Server{
 		Addr: port,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("Hello World!"))
