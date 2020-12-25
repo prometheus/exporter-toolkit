@@ -75,7 +75,6 @@ func getPort() string {
 type TestInputs struct {
 	Name                string
 	Server              func() *http.Server
-	UseNilServer        bool
 	YAMLConfigPath      string
 	ExpectedError       *regexp.Regexp
 	UseTLSClient        bool
@@ -329,16 +328,16 @@ func TestConfigReloading(t *testing.T) {
 		time.Sleep(250 * time.Millisecond)
 		r, err := client.Get("https://localhost" + port)
 		if err != nil {
-			return (err)
+			return err
 		}
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
-			return (err)
+			return err
 		}
 		if string(body) != "Hello World!" {
-			return (errors.New(string(body)))
+			return errors.New(string(body))
 		}
-		return (nil)
+		return nil
 	}
 
 	err := TestClientConnection()
@@ -377,19 +376,15 @@ func (test *TestInputs) Test(t *testing.T) {
 	}()
 
 	var server *http.Server
-	if test.UseNilServer {
-		server = nil
-	} else {
-		server = &http.Server{
-			Addr: port,
-			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Write([]byte("Hello World!"))
-			}),
-		}
-		defer func() {
-			server.Close()
-		}()
+	server = &http.Server{
+		Addr: port,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("Hello World!"))
+		}),
 	}
+	defer func() {
+		server.Close()
+	}()
 	go func() {
 		defer func() {
 			if recover() != nil {

@@ -19,6 +19,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 
 	"github.com/go-kit/kit/log"
@@ -164,11 +165,23 @@ func ConfigToTLSConfig(c *TLSStruct) (*tls.Config, error) {
 	return cfg, nil
 }
 
-// Listen starts the server on the given address. If tlsConfigPath isn't empty the server connection will be started using TLS.
+// Listen starts the server on the given address. Based on the file
+// tlsConfigPath, TLS or basic auth could be enabled.
 func Listen(server *http.Server, tlsConfigPath string, logger log.Logger) error {
+	listener, err := net.Listen("tcp", server.Addr)
+	if err != nil {
+		return err
+	}
+	defer listener.Close()
+	return Serve(listener, server, tlsConfigPath, logger)
+}
+
+// Server starts the server on the given listener. Based on the file
+// tlsConfigPath, TLS or basic auth could be enabled.
+func Serve(l net.Listener, server *http.Server, tlsConfigPath string, logger log.Logger) error {
 	if tlsConfigPath == "" {
 		level.Info(logger).Log("msg", "TLS is disabled.", "http2", false)
-		return server.ListenAndServe()
+		return server.Serve(l)
 	}
 
 	if err := validateUsers(tlsConfigPath); err != nil {
@@ -201,7 +214,7 @@ func Listen(server *http.Server, tlsConfigPath string, logger log.Logger) error 
 	case errNoTLSConfig:
 		// No TLS config, back to plain HTTP.
 		level.Info(logger).Log("msg", "TLS is disabled.", "http2", false)
-		return server.ListenAndServe()
+		return server.Serve(l)
 	default:
 		// Invalid TLS config.
 		return err
@@ -214,7 +227,7 @@ func Listen(server *http.Server, tlsConfigPath string, logger log.Logger) error 
 	server.TLSConfig.GetConfigForClient = func(*tls.ClientHelloInfo) (*tls.Config, error) {
 		return getTLSConfig(tlsConfigPath)
 	}
-	return server.ListenAndServeTLS("", "")
+	return server.ServeTLS(l, "", "")
 }
 
 type cipher uint16
