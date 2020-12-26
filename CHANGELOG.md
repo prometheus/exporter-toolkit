@@ -1,3 +1,12 @@
+## 0.4.0 / 2020-12-26
+
+This release now correctly resolves relative paths with regards to the
+configuration file, instead of the current working directory.
+
+* [FEATURE] `https`: Add a Validate() function. #22
+* [ENHANCEMENT] `https`: Mark kingpin flag as experimental. #20
+* [BUGFIX] `https`: Make certificate paths relative to configuration file. #21
+
 ## 0.3.0 / 2020-12-25
 
 * [FEATURE] `https`: Add Serve to use an existing listener. #16
