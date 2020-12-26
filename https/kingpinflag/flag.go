@@ -20,7 +20,7 @@ import (
 // To use the default Kingpin application, call AddFlags(kingpin.CommandLine)
 func AddFlags(a *kingpin.Application) *string {
 	return a.Flag(
-		"web.config",
-		"Path to config yaml file that can enable TLS or authentication.",
+		"web.config.file",
+		"[EXPERIMENTAL] Path to configuration file that can enable TLS or authentication.",
 	).Default("").String()
 }
