@@ -17,6 +17,7 @@ import (
 	"net/http"
 
 	"github.com/go-kit/kit/log"
+	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -37,14 +38,30 @@ func validateUsers(configPath string) error {
 }
 
 type userAuthRoundtrip struct {
-	tlsConfigPath string
-	handler       http.Handler
-	logger        log.Logger
+	tlsConfigPath   string
+	handler         http.Handler
+	logger          log.Logger
+	failuresCounter prometheus.Counter
+}
+
+func (u *userAuthRoundtrip) instrument(r prometheus.Registerer) {
+	u.failuresCounter = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: "prometheus_toolkit",
+			Subsystem: "https",
+			Name:      "request_basic_authentication_failures_total",
+			Help:      "Total number of requests rejected by basic authentication because of wrong username, password, or configuration.",
+		},
+	)
+	if r != nil {
+		r.MustRegister(u.failuresCounter)
+	}
 }
 
 func (u *userAuthRoundtrip) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c, err := getConfig(u.tlsConfigPath)
 	if err != nil {
+		u.failuresCounter.Inc()
 		u.logger.Log("msg", "Unable to parse configuration", "err", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -65,6 +82,7 @@ func (u *userAuthRoundtrip) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	u.failuresCounter.Inc()
 	w.Header().Set("WWW-Authenticate", "Basic")
 	http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 }
