@@ -230,6 +230,25 @@ func Serve(l net.Listener, server *http.Server, tlsConfigPath string, logger log
 	return server.ServeTLS(l, "", "")
 }
 
+// Validate configuration file by reading the configuration and the certificates.
+func Validate(tlsConfigPath string) error {
+	if tlsConfigPath == "" {
+		return nil
+	}
+	if err := validateUsers(tlsConfigPath); err != nil {
+		return err
+	}
+	c, err := getConfig(tlsConfigPath)
+	if err != nil {
+		return err
+	}
+	_, err = ConfigToTLSConfig(&c.TLSConfig)
+	if err == errNoTLSConfig {
+		return nil
+	}
+	return err
+}
+
 type cipher uint16
 
 func (c *cipher) UnmarshalYAML(unmarshal func(interface{}) error) error {

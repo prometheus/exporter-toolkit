@@ -170,7 +170,8 @@ func TestYAMLFiles(t *testing.T) {
 		},
 	}
 	for _, testInputs := range testTables {
-		t.Run(testInputs.Name, testInputs.Test)
+		t.Run("run/"+testInputs.Name, testInputs.Test)
+		t.Run("validate/"+testInputs.Name, testInputs.TestValidate)
 	}
 }
 
@@ -460,6 +461,23 @@ func (test *TestInputs) Test(t *testing.T) {
 			t.Logf("Got: %v", err)
 		}
 		t.Fail()
+	}
+}
+
+func (test *TestInputs) TestValidate(t *testing.T) {
+	validationErr := Validate(test.YAMLConfigPath)
+	if test.ExpectedError == nil {
+		if validationErr != nil {
+			t.Errorf("Expected no error, got error: %v", validationErr)
+		}
+		return
+	}
+	if validationErr == nil {
+		t.Errorf("Got no error, expected: %v", test.ExpectedError)
+		return
+	}
+	if !test.ExpectedError.MatchString(validationErr.Error()) {
+		t.Errorf("Expected error %v, got error: %v", test.ExpectedError, validationErr)
 	}
 }
 
