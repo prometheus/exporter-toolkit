@@ -1,2 +1,2 @@
 tls_server_config :
-  cert_filse: "testdata/server.crt"
+  cert_filse: "server.crt"
