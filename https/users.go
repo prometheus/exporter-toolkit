@@ -48,7 +48,8 @@ func (u *userAuthRoundtrip) instrument(r prometheus.Registerer) {
 	u.failuresCounter = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Namespace: "prometheus_toolkit",
-			Name:      "http_request_basic_authentication_failures_total",
+			Subsystem: "https",
+			Name:      "basic_authentication_failures_total",
 			Help:      "Total number of requests rejected by basic authentication because of wrong username, password, or configuration.",
 		},
 	)
