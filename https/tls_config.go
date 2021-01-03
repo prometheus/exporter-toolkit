@@ -26,6 +26,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	config_util "github.com/prometheus/common/config"
 	"gopkg.in/yaml.v2"
 )
@@ -176,18 +177,18 @@ func ConfigToTLSConfig(c *TLSStruct) (*tls.Config, error) {
 
 // Listen starts the server on the given address. Based on the file
 // tlsConfigPath, TLS or basic auth could be enabled.
-func Listen(server *http.Server, tlsConfigPath string, logger log.Logger) error {
+func Listen(server *http.Server, tlsConfigPath string, logger log.Logger, r prometheus.Registerer) error {
 	listener, err := net.Listen("tcp", server.Addr)
 	if err != nil {
 		return err
 	}
 	defer listener.Close()
-	return Serve(listener, server, tlsConfigPath, logger)
+	return Serve(listener, server, tlsConfigPath, logger, r)
 }
 
 // Server starts the server on the given listener. Based on the file
 // tlsConfigPath, TLS or basic auth could be enabled.
-func Serve(l net.Listener, server *http.Server, tlsConfigPath string, logger log.Logger) error {
+func Serve(l net.Listener, server *http.Server, tlsConfigPath string, logger log.Logger, r prometheus.Registerer) error {
 	if tlsConfigPath == "" {
 		level.Info(logger).Log("msg", "TLS is disabled.", "http2", false)
 		return server.Serve(l)
@@ -202,11 +203,13 @@ func Serve(l net.Listener, server *http.Server, tlsConfigPath string, logger log
 	if server.Handler != nil {
 		handler = server.Handler
 	}
-	server.Handler = &userAuthRoundtrip{
+	urt := &userAuthRoundtrip{
 		tlsConfigPath: tlsConfigPath,
 		logger:        logger,
 		handler:       handler,
 	}
+	urt.instrument(r)
+	server.Handler = urt
 
 	c, err := getConfig(tlsConfigPath)
 	if err != nil {
