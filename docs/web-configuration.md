@@ -1,16 +1,25 @@
 # Web configuration
 
 Exporters and services instrumented with the Exporter Toolkit share the same
-web configuration file format.
+web configuration file format. This is *experimental* and might change in the
+future.
 
-To run an exporter or service with TLS, use the flag `--web.config`.
+To specify which web configuration file to load, use the --web.config.file flag.
 
-e.g. `./node_exporter --web.config="web-config.yml"`
+The file is written in [YAML format](https://en.wikipedia.org/wiki/YAML),
+defined by the scheme described below.
+Brackets indicate that a parameter is optional. For non-list parameters the
+value is set to the specified default.
 
-The config file should be written in YAML format, and is reloaded on each
-connection to check for new certificates and/or authentication policy.
+The file is read upon every http request, such as any change in the
+configuration and the certificates is picked up immediately.
 
-## Configuration
+Generic placeholders are defined as follows:
+
+* `<boolean>`: a boolean that can take the values `true` or `false`
+* `<filename>`: a valid path in the current working directory
+* `<secret>`: a regular string that is a secret, such as a password
+* `<string>`: a regular string
 
 ```
 tls_server_config:
@@ -19,7 +28,8 @@ tls_server_config:
   key_file: <filename>
 
   # Server policy for client authentication. Maps to ClientAuth Policies.
-  # For more detail on clientAuth options: [ClientAuthType](https://golang.org/pkg/crypto/tls/#ClientAuthType)
+  # For more detail on clientAuth options:
+  # https://golang.org/pkg/crypto/tls/#ClientAuthType
   [ client_auth_type: <string> | default = "NoClientCert" ]
 
   # CA certificate for client certificate authentication to the server.
@@ -53,7 +63,7 @@ tls_server_config:
 http_server_config:
   # Enable HTTP/2 support. Note that HTTP/2 is only supported with TLS.
   # This can not be changed on the fly.
-  [ http2: <bool> | default = true ]
+  [ http2: <boolean> | default = true ]
 
 # Usernames and hashed passwords that have full access to the web
 # server via basic authentication. If empty, no basic authentication is
