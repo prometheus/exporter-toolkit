@@ -174,9 +174,9 @@ func ConfigToTLSConfig(c *TLSStruct) (*tls.Config, error) {
 	return cfg, nil
 }
 
-// Listen starts the server on the given address. Based on the file
+// ListenAndServe starts the server on the given address. Based on the file
 // tlsConfigPath, TLS or basic auth could be enabled.
-func Listen(server *http.Server, tlsConfigPath string, logger log.Logger) error {
+func ListenAndServe(server *http.Server, tlsConfigPath string, logger log.Logger) error {
 	listener, err := net.Listen("tcp", server.Addr)
 	if err != nil {
 		return err
@@ -340,4 +340,12 @@ func (tv *tlsVersion) MarshalYAML() (interface{}, error) {
 		}
 	}
 	return fmt.Sprintf("%v", tv), nil
+}
+
+// Listen starts the server on the given address. Based on the file
+// tlsConfigPath, TLS or basic auth could be enabled.
+//
+// Deprecated: Use ListenAndServe instead.
+func Listen(server *http.Server, tlsConfigPath string, logger log.Logger) error {
+	return ListenAndServe(server, tlsConfigPath, logger)
 }
