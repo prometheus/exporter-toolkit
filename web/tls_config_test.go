@@ -13,7 +13,7 @@
 
 // +build go1.14
 
-package https
+package web
 
 import (
 	"crypto/tls"

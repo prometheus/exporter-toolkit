@@ -11,8 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package https allows the implementation of TLS.
-package https
+package web
 
 import (
 	"crypto/tls"

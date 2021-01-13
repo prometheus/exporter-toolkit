@@ -1,4 +1,4 @@
-# https package
+# web package
 
 This package can be used by Prometheus exporters to enable TLS and
 authentication.
