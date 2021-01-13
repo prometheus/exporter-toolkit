@@ -1,3 +1,8 @@
+## 0.5.0 / 2021-01-13
+
+* [CHANGE] rename `https` package to `web`. #29
+* [CHANGE] `web`: Rename Listen() to ListenAndServe(). #28
+
 ## 0.4.0 / 2020-12-26
 
 This release now correctly resolves relative paths with regards to the
