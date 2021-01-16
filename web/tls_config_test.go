@@ -382,16 +382,14 @@ func (test *TestInputs) Test(t *testing.T) {
 			w.Write([]byte("Hello World!"))
 		}),
 	}
-	defer func() {
-		server.Close()
-	}()
+	t.Cleanup(func() { server.Close() })
 	go func() {
 		defer func() {
 			if recover() != nil {
 				recordConnectionError(errors.New("Panic starting server"))
 			}
 		}()
-		err := Listen(server, test.YAMLConfigPath, testlogger)
+		err := ListenAndServe(server, test.YAMLConfigPath, testlogger)
 		recordConnectionError(err)
 	}()
 
