@@ -46,7 +46,7 @@ type userAuthRoundtrip struct {
 	logger        log.Logger
 	cache         *cache
 	// bcryptMtx is there to ensure that bcrypt.CompareHashAndPassword is run
-	// only once in parallel as this is CPU expansive.
+	// only once in parallel as this is CPU intensive.
 	bcryptMtx sync.Mutex
 }
 
