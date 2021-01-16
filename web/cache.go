@@ -45,6 +45,20 @@ func newCache(size int) *cache {
 	}
 }
 
+func (c *cache) get(key string) (bool, bool) {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	v, ok := c.cache[key]
+	return v, ok
+}
+
+func (c *cache) set(key string, value bool) {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	c.makeRoom()
+	c.cache[key] = value
+}
+
 func (c *cache) makeRoom() {
 	if len(c.cache) < cacheSize {
 		return

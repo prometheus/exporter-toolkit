@@ -24,9 +24,7 @@ func TestCacheSize(t *testing.T) {
 	cache := newCache(100)
 	expectedSize := 0
 	for i := 0; i < 200; i++ {
-		cache.makeRoom()
-		cache.cache[fmt.Sprintf("foo%d", i)] = true
-
+		cache.set(fmt.Sprintf("foo%d", i), true)
 		expectedSize++
 		if expectedSize > 100 {
 			expectedSize = 90

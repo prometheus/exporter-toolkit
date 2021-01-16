@@ -18,6 +18,7 @@ package web
 import (
 	"encoding/hex"
 	"net/http"
+	"sync"
 
 	"github.com/go-kit/kit/log"
 	"golang.org/x/crypto/bcrypt"
@@ -44,6 +45,9 @@ type userAuthRoundtrip struct {
 	handler       http.Handler
 	logger        log.Logger
 	cache         *cache
+	// bcryptMtx is there to ensure that bcrypt.CompareHashAndPassword is run
+	// only once in parallel as this is CPU expansive.
+	bcryptMtx sync.Mutex
 }
 
 func (u *userAuthRoundtrip) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -63,19 +67,18 @@ func (u *userAuthRoundtrip) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if auth {
 		if hashedPassword, ok := c.Users[user]; ok {
 			cacheKey := hex.EncodeToString(append(append([]byte(user), []byte(hashedPassword)...), []byte(pass)...))
-			u.cache.mtx.Lock()
-			if valid, ok := u.cache.cache[cacheKey]; valid && ok {
-				u.cache.mtx.Unlock()
-				u.handler.ServeHTTP(w, r)
-				return
+			authOk, ok := u.cache.get(cacheKey)
+
+			if !ok {
+				// This user, hashedPassword, password is not cached.
+				u.bcryptMtx.Lock()
+				err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(pass))
+				u.bcryptMtx.Unlock()
+
+				authOk = err == nil
+				u.cache.set(cacheKey, authOk)
 			}
-			u.cache.makeRoom()
-			u.cache.mtx.Unlock()
-			err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(pass))
-			authOk := err == nil
-			u.cache.mtx.Lock()
-			u.cache.cache[cacheKey] = authOk
-			u.cache.mtx.Unlock()
+
 			if authOk {
 				u.handler.ServeHTTP(w, r)
 				return
