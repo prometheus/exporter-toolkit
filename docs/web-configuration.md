@@ -90,3 +90,9 @@ hash. A higher cost will en up slowing down the authentication process.
 Depending on the machine, a cost of 10 will take about ~70ms where a cost of
 18 can take up to a few seconds. That hash will be computed on every
 password-protected request.
+
+## Performance
+
+Basic authentication is meant for simple use cases, with a few users.  If you
+need to authenticate a lot of users, it is recommended to use TLS client
+certificates, or to use a proper reverse proxy to handle the authentication.
