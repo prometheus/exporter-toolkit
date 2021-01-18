@@ -83,3 +83,48 @@ func TestBasicAuthCache(t *testing.T) {
 	close(start)
 	wg.Wait()
 }
+
+// TestBasicAuthWithFakePassword validates that we can't login the "fakepassword" used in
+// to prevent user enumeration.
+func TestBasicAuthWithFakepassword(t *testing.T) {
+	server := &http.Server{
+		Addr: port,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("Hello World!"))
+		}),
+	}
+
+	done := make(chan struct{})
+	t.Cleanup(func() {
+		if err := server.Shutdown(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		<-done
+	})
+
+	go func() {
+		ListenAndServe(server, "testdata/tls_config_users_noTLS.good.yml", testlogger)
+		close(done)
+	}()
+
+	login := func() {
+		client := &http.Client{}
+		req, err := http.NewRequest("GET", "http://localhost"+port, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.SetBasicAuth("fakeuser", "fakepassword")
+		r, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.StatusCode != 401 {
+			t.Fatalf("bad return code, expected %d, got %d", 401, r.StatusCode)
+		}
+	}
+
+	// Login with a cold cache.
+	login()
+	// Login with the response cached.
+	login()
+}
