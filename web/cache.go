@@ -39,12 +39,9 @@ type cache struct {
 // memory for a longer time (this should not be a problem as long as your
 // machine is not compromised, at which point all bets are off, since basicauth
 // necessitates plaintext passwords being received over the wire anyway).
-func newCache(size int) *cache {
-	if size > cacheSize/10 {
-		size = cacheSize / 10
-	}
+func newCache() *cache {
 	return &cache{
-		cache: make(map[string]bool, size),
+		cache: make(map[string]bool),
 	}
 }
 

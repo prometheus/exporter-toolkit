@@ -211,7 +211,7 @@ func Serve(l net.Listener, server *http.Server, tlsConfigPath string, logger log
 		tlsConfigPath: tlsConfigPath,
 		logger:        logger,
 		handler:       handler,
-		cache:         newCache(len(c.Users)),
+		cache:         newCache(),
 	}
 
 	config, err := ConfigToTLSConfig(&c.TLSConfig)
