@@ -65,24 +65,31 @@ func (u *userAuthRoundtrip) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	user, pass, auth := r.BasicAuth()
 	if auth {
-		if hashedPassword, ok := c.Users[user]; ok {
-			cacheKey := hex.EncodeToString(append(append([]byte(user), []byte(hashedPassword)...), []byte(pass)...))
-			authOk, ok := u.cache.get(cacheKey)
+		hashedPassword, validUser := c.Users[user]
 
-			if !ok {
-				// This user, hashedPassword, password is not cached.
-				u.bcryptMtx.Lock()
-				err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(pass))
-				u.bcryptMtx.Unlock()
+		if !validUser {
+			// The user is not found. Use a fixed password hash to
+			// prevent user enumeration by timing requests.
+			// This is a bcrypt-hashed version of "fakepassword".
+			hashedPassword = "$2y$10$QOauhQNbBCuQDKes6eFzPeMqBSjb7Mr5DUmpZ/VcEd00UAV/LDeSi"
+		}
 
-				authOk = err == nil
-				u.cache.set(cacheKey, authOk)
-			}
+		cacheKey := hex.EncodeToString(append(append([]byte(user), []byte(hashedPassword)...), []byte(pass)...))
+		authOk, ok := u.cache.get(cacheKey)
 
-			if authOk {
-				u.handler.ServeHTTP(w, r)
-				return
-			}
+		if !ok {
+			// This user, hashedPassword, password is not cached.
+			u.bcryptMtx.Lock()
+			err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(pass))
+			u.bcryptMtx.Unlock()
+
+			authOk = err == nil
+			u.cache.set(cacheKey, authOk)
+		}
+
+		if authOk && validUser {
+			u.handler.ServeHTTP(w, r)
+			return
 		}
 	}
 
