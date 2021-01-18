@@ -40,6 +40,9 @@ type cache struct {
 // machine is not compromised, at which point all bets are off, since basicauth
 // necessitates plaintext passwords being received over the wire anyway).
 func newCache(size int) *cache {
+	if size > cacheSize/10 {
+		size = cacheSize / 10
+	}
 	return &cache{
 		cache: make(map[string]bool, size),
 	}
