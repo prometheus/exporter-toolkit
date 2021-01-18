@@ -1,7 +1,12 @@
 ## 0.5.1 / 2021-01-15
 
+This release includes a bugfix for a side-channel security issue that would
+allow an attacker to verify if a user is defined in the configuration by timing
+request. #39
+
 * [ENHANCEMENT] Cache basic authentication results to significantly improve
   performance. #32
+* [BUGFIX] Prevent user enumeration by timing requests. #39
 
 ## 0.5.0 / 2021-01-13
 
