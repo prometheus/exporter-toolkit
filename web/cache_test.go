@@ -21,7 +21,7 @@ import (
 // TestCacheSize validates that makeRoom function caps the size of the cache
 // appropriately.
 func TestCacheSize(t *testing.T) {
-	cache := newCache(100)
+	cache := newCache()
 	expectedSize := 0
 	for i := 0; i < 200; i++ {
 		cache.set(fmt.Sprintf("foo%d", i), true)
