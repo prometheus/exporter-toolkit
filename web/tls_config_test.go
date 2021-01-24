@@ -54,6 +54,8 @@ var (
 		"No HTTP2 cipher":              regexp.MustCompile(`TLSConfig.CipherSuites is missing an HTTP/2-required`),
 		"Incompatible TLS version":     regexp.MustCompile(`protocol version not supported`),
 		"Bad certificate":              regexp.MustCompile(`bad certificate`),
+		"Invalid value":                regexp.MustCompile(`invalid value for`),
+		"Invalid header":               regexp.MustCompile(`HTTP header ".*" can not be configured`),
 	}
 )
 
@@ -96,77 +98,77 @@ func TestYAMLFiles(t *testing.T) {
 		},
 		{
 			Name:           `empty config yml`,
-			YAMLConfigPath: "testdata/tls_config_empty.yml",
+			YAMLConfigPath: "testdata/web_config_empty.yml",
 			ExpectedError:  nil,
 		},
 		{
 			Name:           `invalid config yml (invalid structure)`,
-			YAMLConfigPath: "testdata/tls_config_junk.yml",
+			YAMLConfigPath: "testdata/web_config_junk.yml",
 			ExpectedError:  ErrorMap["YAML error"],
 		},
 		{
 			Name:           `invalid config yml (invalid key)`,
-			YAMLConfigPath: "testdata/tls_config_junk_key.yml",
+			YAMLConfigPath: "testdata/web_config_junk_key.yml",
 			ExpectedError:  ErrorMap["YAML error"],
 		},
 		{
 			Name:           `invalid config yml (cert path empty)`,
-			YAMLConfigPath: "testdata/tls_config_noAuth_certPath_empty.bad.yml",
+			YAMLConfigPath: "testdata/web_config_noAuth_certPath_empty.bad.yml",
 			ExpectedError:  ErrorMap["Invalid CertPath"],
 		},
 		{
 			Name:           `invalid config yml (key path empty)`,
-			YAMLConfigPath: "testdata/tls_config_noAuth_keyPath_empty.bad.yml",
+			YAMLConfigPath: "testdata/web_config_noAuth_keyPath_empty.bad.yml",
 			ExpectedError:  ErrorMap["Invalid KeyPath"],
 		},
 		{
 			Name:           `invalid config yml (cert path and key path empty)`,
-			YAMLConfigPath: "testdata/tls_config_noAuth_certPath_keyPath_empty.bad.yml",
+			YAMLConfigPath: "testdata/web_config_noAuth_certPath_keyPath_empty.bad.yml",
 			ExpectedError:  ErrorMap["Invalid CertPath"],
 		},
 		{
 			Name:           `invalid config yml (cert path invalid)`,
-			YAMLConfigPath: "testdata/tls_config_noAuth_certPath_invalid.bad.yml",
+			YAMLConfigPath: "testdata/web_config_noAuth_certPath_invalid.bad.yml",
 			ExpectedError:  ErrorMap["No such file"],
 		},
 		{
 			Name:           `invalid config yml (key path invalid)`,
-			YAMLConfigPath: "testdata/tls_config_noAuth_keyPath_invalid.bad.yml",
+			YAMLConfigPath: "testdata/web_config_noAuth_keyPath_invalid.bad.yml",
 			ExpectedError:  ErrorMap["No such file"],
 		},
 		{
 			Name:           `invalid config yml (cert path and key path invalid)`,
-			YAMLConfigPath: "testdata/tls_config_noAuth_certPath_keyPath_invalid.bad.yml",
+			YAMLConfigPath: "testdata/web_config_noAuth_certPath_keyPath_invalid.bad.yml",
 			ExpectedError:  ErrorMap["No such file"],
 		},
 		{
 			Name:           `invalid config yml (invalid ClientAuth)`,
-			YAMLConfigPath: "testdata/tls_config_noAuth.bad.yml",
+			YAMLConfigPath: "testdata/web_config_noAuth.bad.yml",
 			ExpectedError:  ErrorMap["ClientCA set without policy"],
 		},
 		{
 			Name:           `invalid config yml (invalid ClientCAs filepath)`,
-			YAMLConfigPath: "testdata/tls_config_auth_clientCAs_invalid.bad.yml",
+			YAMLConfigPath: "testdata/web_config_auth_clientCAs_invalid.bad.yml",
 			ExpectedError:  ErrorMap["No such file"],
 		},
 		{
 			Name:           `invalid config yml (invalid user list)`,
-			YAMLConfigPath: "testdata/tls_config_auth_user_list_invalid.bad.yml",
+			YAMLConfigPath: "testdata/web_config_auth_user_list_invalid.bad.yml",
 			ExpectedError:  ErrorMap["Bad password"],
 		},
 		{
 			Name:           `invalid config yml (bad cipher)`,
-			YAMLConfigPath: "testdata/tls_config_noAuth_inventedCiphers.bad.yml",
+			YAMLConfigPath: "testdata/web_config_noAuth_inventedCiphers.bad.yml",
 			ExpectedError:  ErrorMap["Unknown cipher"],
 		},
 		{
 			Name:           `invalid config yml (bad curves)`,
-			YAMLConfigPath: "testdata/tls_config_noAuth_inventedCurves.bad.yml",
+			YAMLConfigPath: "testdata/web_config_noAuth_inventedCurves.bad.yml",
 			ExpectedError:  ErrorMap["Unknown curve"],
 		},
 		{
 			Name:           `invalid config yml (bad TLS version)`,
-			YAMLConfigPath: "testdata/tls_config_noAuth_wrongTLSVersion.bad.yml",
+			YAMLConfigPath: "testdata/web_config_noAuth_wrongTLSVersion.bad.yml",
 			ExpectedError:  ErrorMap["Unknown TLS version"],
 		},
 	}
@@ -191,45 +193,45 @@ func TestServerBehaviour(t *testing.T) {
 		},
 		{
 			Name:           `valid tls config yml and default client`,
-			YAMLConfigPath: "testdata/tls_config_noAuth.good.yml",
+			YAMLConfigPath: "testdata/web_config_noAuth.good.yml",
 			ExpectedError:  ErrorMap["HTTP Request to HTTPS server"],
 		},
 		{
 			Name:           `valid tls config yml and tls client`,
-			YAMLConfigPath: "testdata/tls_config_noAuth.good.yml",
+			YAMLConfigPath: "testdata/web_config_noAuth.good.yml",
 			UseTLSClient:   true,
 			ExpectedError:  nil,
 		},
 		{
 			Name:                `valid tls config yml with TLS 1.1 client`,
-			YAMLConfigPath:      "testdata/tls_config_noAuth.good.yml",
+			YAMLConfigPath:      "testdata/web_config_noAuth.good.yml",
 			UseTLSClient:        true,
 			ClientMaxTLSVersion: tls.VersionTLS11,
 			ExpectedError:       ErrorMap["Incompatible TLS version"],
 		},
 		{
 			Name:           `valid tls config yml with all ciphers`,
-			YAMLConfigPath: "testdata/tls_config_noAuth_allCiphers.good.yml",
+			YAMLConfigPath: "testdata/web_config_noAuth_allCiphers.good.yml",
 			UseTLSClient:   true,
 			ExpectedError:  nil,
 		},
 		{
 			Name:           `valid tls config yml with some ciphers`,
-			YAMLConfigPath: "testdata/tls_config_noAuth_someCiphers.good.yml",
+			YAMLConfigPath: "testdata/web_config_noAuth_someCiphers.good.yml",
 			UseTLSClient:   true,
 			CipherSuites:   []uint16{tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256},
 			ExpectedError:  nil,
 		},
 		{
 			Name:           `valid tls config yml with no common cipher`,
-			YAMLConfigPath: "testdata/tls_config_noAuth_someCiphers.good.yml",
+			YAMLConfigPath: "testdata/web_config_noAuth_someCiphers.good.yml",
 			UseTLSClient:   true,
 			CipherSuites:   []uint16{tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA},
 			ExpectedError:  ErrorMap["Handshake failure"],
 		},
 		{
 			Name:           `valid tls config yml with multiple client ciphers`,
-			YAMLConfigPath: "testdata/tls_config_noAuth_someCiphers.good.yml",
+			YAMLConfigPath: "testdata/web_config_noAuth_someCiphers.good.yml",
 			UseTLSClient:   true,
 			CipherSuites: []uint16{
 				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
@@ -240,7 +242,7 @@ func TestServerBehaviour(t *testing.T) {
 		},
 		{
 			Name:           `valid tls config yml with multiple client ciphers, client chooses cipher`,
-			YAMLConfigPath: "testdata/tls_config_noAuth_someCiphers_noOrder.good.yml",
+			YAMLConfigPath: "testdata/web_config_noAuth_someCiphers_noOrder.good.yml",
 			UseTLSClient:   true,
 			CipherSuites: []uint16{
 				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
@@ -251,33 +253,33 @@ func TestServerBehaviour(t *testing.T) {
 		},
 		{
 			Name:           `valid tls config yml with all curves`,
-			YAMLConfigPath: "testdata/tls_config_noAuth_allCurves.good.yml",
+			YAMLConfigPath: "testdata/web_config_noAuth_allCurves.good.yml",
 			UseTLSClient:   true,
 			ExpectedError:  nil,
 		},
 		{
 			Name:             `valid tls config yml with some curves`,
-			YAMLConfigPath:   "testdata/tls_config_noAuth_someCurves.good.yml",
+			YAMLConfigPath:   "testdata/web_config_noAuth_someCurves.good.yml",
 			UseTLSClient:     true,
 			CurvePreferences: []tls.CurveID{tls.CurveP521},
 			ExpectedError:    nil,
 		},
 		{
 			Name:             `valid tls config yml with no common curves`,
-			YAMLConfigPath:   "testdata/tls_config_noAuth_someCurves.good.yml",
+			YAMLConfigPath:   "testdata/web_config_noAuth_someCurves.good.yml",
 			UseTLSClient:     true,
 			CurvePreferences: []tls.CurveID{tls.CurveP384},
 			ExpectedError:    ErrorMap["Handshake failure"],
 		},
 		{
 			Name:           `valid tls config yml with non-http2 ciphers`,
-			YAMLConfigPath: "testdata/tls_config_noAuth_noHTTP2.good.yml",
+			YAMLConfigPath: "testdata/web_config_noAuth_noHTTP2.good.yml",
 			UseTLSClient:   true,
 			ExpectedError:  nil,
 		},
 		{
 			Name:           `valid tls config yml with non-http2 ciphers but http2 enabled`,
-			YAMLConfigPath: "testdata/tls_config_noAuth_noHTTP2Cipher.bad.yml",
+			YAMLConfigPath: "testdata/web_config_noAuth_noHTTP2Cipher.bad.yml",
 			UseTLSClient:   true,
 			ExpectedError:  ErrorMap["No HTTP2 cipher"],
 		},
@@ -286,6 +288,25 @@ func TestServerBehaviour(t *testing.T) {
 			YAMLConfigPath: "testdata/tls_config_noAuth.requireanyclientcert.good.yml",
 			UseTLSClient:   true,
 			ExpectedError:  ErrorMap["Bad certificate"],
+		},
+		{
+			Name:           `valid headers config`,
+			YAMLConfigPath: "testdata/web_config_headers.good.yml",
+		},
+		{
+			Name:           `invalid X-Content-Type-Options headers config`,
+			YAMLConfigPath: "testdata/web_config_headers_content_type_options.bad.yml",
+			ExpectedError:  ErrorMap["Invalid value"],
+		},
+		{
+			Name:           `invalid X-Frame-Options headers config`,
+			YAMLConfigPath: "testdata/web_config_headers_frame_options.bad.yml",
+			ExpectedError:  ErrorMap["Invalid value"],
+		},
+		{
+			Name:           `HTTP header that can not be overriden`,
+			YAMLConfigPath: "testdata/web_config_headers_extra_header.bad.yml",
+			ExpectedError:  ErrorMap["Invalid header"],
 		},
 	}
 	for _, testInputs := range testTables {
@@ -307,8 +328,8 @@ func TestConfigReloading(t *testing.T) {
 		}
 	}()
 
-	goodYAMLPath := "testdata/tls_config_noAuth.good.yml"
-	badYAMLPath := "testdata/tls_config_noAuth.good.blocking.yml"
+	goodYAMLPath := "testdata/web_config_noAuth.good.yml"
+	badYAMLPath := "testdata/web_config_noAuth.good.blocking.yml"
 
 	server := &http.Server{
 		Addr: port,
@@ -539,25 +560,25 @@ func TestUsers(t *testing.T) {
 	testTables := []*TestInputs{
 		{
 			Name:           `without basic auth`,
-			YAMLConfigPath: "testdata/tls_config_users_noTLS.good.yml",
+			YAMLConfigPath: "testdata/web_config_users_noTLS.good.yml",
 			ExpectedError:  ErrorMap["Unauthorized"],
 		},
 		{
 			Name:           `with correct basic auth`,
-			YAMLConfigPath: "testdata/tls_config_users_noTLS.good.yml",
+			YAMLConfigPath: "testdata/web_config_users_noTLS.good.yml",
 			Username:       "dave",
 			Password:       "dave123",
 			ExpectedError:  nil,
 		},
 		{
 			Name:           `without basic auth and TLS`,
-			YAMLConfigPath: "testdata/tls_config_users.good.yml",
+			YAMLConfigPath: "testdata/web_config_users.good.yml",
 			UseTLSClient:   true,
 			ExpectedError:  ErrorMap["Unauthorized"],
 		},
 		{
 			Name:           `with correct basic auth and TLS`,
-			YAMLConfigPath: "testdata/tls_config_users.good.yml",
+			YAMLConfigPath: "testdata/web_config_users.good.yml",
 			UseTLSClient:   true,
 			Username:       "dave",
 			Password:       "dave123",
@@ -565,7 +586,7 @@ func TestUsers(t *testing.T) {
 		},
 		{
 			Name:           `with another correct basic auth and TLS`,
-			YAMLConfigPath: "testdata/tls_config_users.good.yml",
+			YAMLConfigPath: "testdata/web_config_users.good.yml",
 			UseTLSClient:   true,
 			Username:       "carol",
 			Password:       "carol123",
@@ -573,7 +594,7 @@ func TestUsers(t *testing.T) {
 		},
 		{
 			Name:           `with bad password and TLS`,
-			YAMLConfigPath: "testdata/tls_config_users.good.yml",
+			YAMLConfigPath: "testdata/web_config_users.good.yml",
 			UseTLSClient:   true,
 			Username:       "dave",
 			Password:       "bad",
@@ -581,7 +602,7 @@ func TestUsers(t *testing.T) {
 		},
 		{
 			Name:           `with bad username and TLS`,
-			YAMLConfigPath: "testdata/tls_config_users.good.yml",
+			YAMLConfigPath: "testdata/web_config_users.good.yml",
 			UseTLSClient:   true,
 			Username:       "nonexistent",
 			Password:       "nonexistent",

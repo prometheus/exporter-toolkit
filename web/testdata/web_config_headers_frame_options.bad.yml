@@ -1,0 +1,3 @@
+http_server_config:
+  headers:
+    X-Frame-Options: foo

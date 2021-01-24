@@ -1,0 +1,3 @@
+http_server_config:
+  headers:
+    X-Content-Type-Options: sniff

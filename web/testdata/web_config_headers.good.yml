@@ -1,0 +1,7 @@
+http_server_config:
+  headers:
+    X-Frame-Options: deny
+    Strict-Transport-Security: max-age=31536000; includeSubDomains
+    X-Content-Type-Options: nosniff
+    X-XSS-Protection: 1
+    Content-Security-Policy: "default-src 'self' *.test.example.net"
