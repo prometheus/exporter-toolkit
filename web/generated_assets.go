@@ -33,5 +33,9 @@ var htmlContent = `<!doctype html>
     </body>
 </html>
 `
-var cssContent = `Hello
+var cssContent = `
+h1 {
+   color: #fff;
+   background-color: #343a40
+}
 `
