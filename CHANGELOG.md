@@ -1,3 +1,7 @@
+## 0.6.0 / 2021-06-30
+
+* [CHANGE] Move from github.com/go-kit/kit/log to github.com/go-kit/log #55
+
 ## 0.5.1 / 2021-01-15
 
 This release includes a bugfix for a side-channel security issue that would
