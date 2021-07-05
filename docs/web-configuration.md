@@ -4,7 +4,7 @@ Exporters and services instrumented with the Exporter Toolkit share the same
 web configuration file format. This is *experimental* and might change in the
 future.
 
-To specify which web configuration file to load, use the --web.config.file flag.
+To specify which web configuration file to load, use the `--web.config.file` flag.
 
 The file is written in [YAML format](https://en.wikipedia.org/wiki/YAML),
 defined by the scheme described below.
@@ -12,7 +12,7 @@ Brackets indicate that a parameter is optional. For non-list parameters the
 value is set to the specified default.
 
 The file is read upon every http request, such as any change in the
-configuration and the certificates is picked up immediately.
+configuration, so the certificates are picked up immediately.
 
 Generic placeholders are defined as follows:
 
@@ -86,10 +86,10 @@ which will look something like:
 `$2y$10$X0h1gDsPszWURQaxFh.zoubFi6DXncSjhoQNJgRrnGs7EsimhC7zG`
 
 The cost (10 in the example) influences the time it takes for computing the
-hash. A higher cost will en up slowing down the authentication process.
-Depending on the machine, a cost of 10 will take about ~70ms where a cost of
-18 can take up to a few seconds. That hash will be computed on every
-password-protected request.
+hash. A higher cost will end up slowing down the authentication process.
+Depending on the machine, a cost of 10 will take about ~70ms, whereas a cost of
+18 can take up to a few seconds. That hash will be computed on the first
+authenticated HTTP request and then cached.
 
 ## Performance
 
