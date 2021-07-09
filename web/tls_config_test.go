@@ -53,6 +53,7 @@ var (
 		"Unknown TLS version":          regexp.MustCompile(`unknown TLS version`),
 		"No HTTP2 cipher":              regexp.MustCompile(`TLSConfig.CipherSuites is missing an HTTP/2-required`),
 		"Incompatible TLS version":     regexp.MustCompile(`protocol version not supported`),
+		"Bad certificate":              regexp.MustCompile(`bad certificate`),
 	}
 )
 
@@ -279,6 +280,12 @@ func TestServerBehaviour(t *testing.T) {
 			YAMLConfigPath: "testdata/tls_config_noAuth_noHTTP2Cipher.bad.yml",
 			UseTLSClient:   true,
 			ExpectedError:  ErrorMap["No HTTP2 cipher"],
+		},
+		{
+			Name:           `valid tls config yml and tls client with RequireAnyClientCert`,
+			YAMLConfigPath: "testdata/tls_config_noAuth.requireanyclientcert.good.yml",
+			UseTLSClient:   true,
+			ExpectedError:  ErrorMap["Bad certificate"],
 		},
 	}
 	for _, testInputs := range testTables {
