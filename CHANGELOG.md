@@ -1,3 +1,7 @@
+## 0.6.1 / 2021-06-30
+
+* [BUGFIX] Allow RequireAnyClientCert as client_auth_type. #58
+
 ## 0.6.0 / 2021-06-30
 
 * [CHANGE] Move from github.com/go-kit/kit/log to github.com/go-kit/log #55
