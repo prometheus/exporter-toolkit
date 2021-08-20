@@ -14,13 +14,16 @@
 package web
 
 import (
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"path/filepath"
+	"strings"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -40,15 +43,16 @@ type Config struct {
 }
 
 type TLSStruct struct {
-	TLSCertPath              string     `yaml:"cert_file"`
-	TLSKeyPath               string     `yaml:"key_file"`
-	ClientAuth               string     `yaml:"client_auth_type"`
-	ClientCAs                string     `yaml:"client_ca_file"`
-	CipherSuites             []cipher   `yaml:"cipher_suites"`
-	CurvePreferences         []curve    `yaml:"curve_preferences"`
-	MinVersion               tlsVersion `yaml:"min_version"`
-	MaxVersion               tlsVersion `yaml:"max_version"`
-	PreferServerCipherSuites bool       `yaml:"prefer_server_cipher_suites"`
+	TLSCertPath              string              `yaml:"cert_file"`
+	TLSKeyPath               string              `yaml:"key_file"`
+	ClientAuth               string              `yaml:"client_auth_type"`
+	ClientCAs                string              `yaml:"client_ca_file"`
+	ClientFingerprints       []sha256fingerprint `yaml:"client_fingerprints"`
+	CipherSuites             []cipher            `yaml:"cipher_suites"`
+	CurvePreferences         []curve             `yaml:"curve_preferences"`
+	MinVersion               tlsVersion          `yaml:"min_version"`
+	MaxVersion               tlsVersion          `yaml:"max_version"`
+	PreferServerCipherSuites bool                `yaml:"prefer_server_cipher_suites"`
 }
 
 // SetDirectory joins any relative file paths with dir.
@@ -168,6 +172,22 @@ func ConfigToTLSConfig(c *TLSStruct) (*tls.Config, error) {
 
 	if c.ClientCAs != "" && cfg.ClientAuth == tls.NoClientCert {
 		return nil, errors.New("Client CA's have been configured without a Client Auth Policy")
+	}
+	if c.ClientFingerprints != nil && cfg.ClientAuth == tls.NoClientCert {
+		return nil, errors.New("client fingerprint whitelist has been configured without a Client Auth Policy")
+	}
+	if c.ClientFingerprints != nil {
+		cfg.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+			if len(rawCerts) > 0 {
+				fingerprint := sha256.Sum256(rawCerts[0])
+				for _, allowedFingerprint := range c.ClientFingerprints {
+					if fingerprint == allowedFingerprint {
+						return nil
+					}
+				}
+			}
+			return errors.New("invalid client certificate presented")
+		}
 	}
 
 	return cfg, nil
@@ -341,6 +361,33 @@ func (tv *tlsVersion) MarshalYAML() (interface{}, error) {
 		}
 	}
 	return fmt.Sprintf("%v", tv), nil
+}
+
+type sha256fingerprint [sha256.Size]byte
+
+func (fp *sha256fingerprint) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var s string
+	if err := unmarshal(&s); err != nil {
+		return err
+	}
+
+	// openssl x509 -fingerprint outputs data in format with colons
+	s = strings.ReplaceAll(s, ":", "")
+
+	n, err := hex.Decode(fp[:], []byte(s))
+	if err != nil {
+		return err
+	}
+
+	if n != len(*fp) {
+		return fmt.Errorf("invalid sha256 fingerprint length: got=%d expected=%d", n, len(*fp))
+	}
+	return nil
+}
+
+func (fp *sha256fingerprint) MarshalYAML() (interface{}, error) {
+	res := hex.EncodeToString(fp[:])
+	return res, nil
 }
 
 // Listen starts the server on the given address. Based on the file

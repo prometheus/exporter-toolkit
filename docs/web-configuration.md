@@ -32,11 +32,30 @@ tls_server_config:
   # https://golang.org/pkg/crypto/tls/#ClientAuthType
   #
   # NOTE: If you want to enable client authentication, you need to use
-  # RequireAndVerifyClientCert. Other values are insecure.
+  # RequireAndVerifyClientCert, or RequireAnyClientCert with
+  # client_fingerprints option (see below). Other values are insecure.
   [ client_auth_type: <string> | default = "NoClientCert" ]
 
   # CA certificate for client certificate authentication to the server.
   [ client_ca_file: <filename> ]
+
+  # List of accepted SHA256 client fingerprints. The format is hex string
+  # (with or without colons). Useful for simple setups that have no need
+  # for full-blown CA for clients.
+  #
+  # Fingerprint can be obtained using openssl x509 -fingerprint -sha256.
+  #
+  # NOTE: empty list is different from not setting this option at all.
+  # The former will reject all certificates outright, the latter will
+  # make client_auth_type decide on the certificate validity.
+  #
+  # NOTE: client_ca_file should be set to RequireAnyClientCert.
+  # RequestClientCert and VerifyClientCertIfGiven can be bypassed by not
+  # sending any certificate. RequireAndVerifyClientCert would require
+  # the client certificate to be signed by client_ca_file (in addition
+  # to be whitelisted), which is probably not what you want.
+  [ client_fingerprints:
+    [ - <string> ] ]
 
   # Minimum TLS version that is acceptable.
   [ min_version: <string> | default = "TLS12" ]

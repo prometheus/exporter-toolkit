@@ -1,0 +1,6 @@
+tls_server_config:
+  cert_file: "server.crt"
+  key_file: "server.key"
+  client_auth_type: "RequireAnyClientCert"
+  client_fingerprints:
+  - 92:CA:04:83:30:41:AE:6D:70:07:C3:3F:77:D7:1D:17:3E:00:7A:61:71:7D:39:A6:6F:02:67:10:50:CC:BA:37

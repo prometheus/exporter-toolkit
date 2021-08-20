@@ -44,6 +44,7 @@ var (
 		"Invalid CertPath":             regexp.MustCompile(`missing cert_file`),
 		"Invalid KeyPath":              regexp.MustCompile(`missing key_file`),
 		"ClientCA set without policy":  regexp.MustCompile(`Client CA's have been configured without a Client Auth Policy`),
+		"whitelist set without policy": regexp.MustCompile(`client fingerprint whitelist has been configured without a Client Auth Policy`),
 		"Bad password":                 regexp.MustCompile(`hashedSecret too short to be a bcrypted password`),
 		"Unauthorized":                 regexp.MustCompile(`Unauthorized`),
 		"Forbidden":                    regexp.MustCompile(`Forbidden`),
@@ -144,6 +145,11 @@ func TestYAMLFiles(t *testing.T) {
 			Name:           `invalid config yml (invalid ClientAuth)`,
 			YAMLConfigPath: "testdata/tls_config_noAuth.bad.yml",
 			ExpectedError:  ErrorMap["ClientCA set without policy"],
+		},
+		{
+			Name:           `invalid config yml (invalid ClientAuth with fingerprint whitelist)`,
+			YAMLConfigPath: "testdata/tls_config_noAuth.fingerprint.bad.yml",
+			ExpectedError:  ErrorMap["whitelist set without policy"],
 		},
 		{
 			Name:           `invalid config yml (invalid ClientCAs filepath)`,
@@ -311,6 +317,47 @@ func TestServerBehaviour(t *testing.T) {
 		{
 			Name:              `valid tls config yml and tls client with RequireAndVerifyClientCert (present wrong certificate)`,
 			YAMLConfigPath:    "testdata/tls_config_noAuth.requireandverifyclientcert.good.yml",
+			UseTLSClient:      true,
+			ClientCertificate: "client2_selfsigned",
+			ExpectedError:     ErrorMap["Bad certificate"],
+		},
+		// fingerprint whitelist test follow
+		{
+			Name:           `valid tls config yml and tls client with fingerprint whitelist`,
+			YAMLConfigPath: "testdata/tls_config_noAuth.fingerprint.good.yml",
+			UseTLSClient:   true,
+			ExpectedError:  ErrorMap["Bad certificate"],
+		},
+		{
+			Name:              `valid tls config yml and tls client with fingerprint (present certificate)`,
+			YAMLConfigPath:    "testdata/tls_config_noAuth.fingerprint.good.yml",
+			UseTLSClient:      true,
+			ClientCertificate: "client_selfsigned",
+			ExpectedError:     nil,
+		},
+		{
+			Name:              `valid tls config yml and tls client with fingerprint (present wrong certificate)`,
+			YAMLConfigPath:    "testdata/tls_config_noAuth.fingerprint.good.yml",
+			UseTLSClient:      true,
+			ClientCertificate: "client2_selfsigned",
+			ExpectedError:     ErrorMap["Bad certificate"],
+		},
+		{
+			Name:           `valid tls config yml and tls client with empty fingerprint whitelist`,
+			YAMLConfigPath: "testdata/tls_config_noAuth.fingerprint_empty.good.yml",
+			UseTLSClient:   true,
+			ExpectedError:  ErrorMap["Bad certificate"],
+		},
+		{
+			Name:              `valid tls config yml and tls client with empty fingerprint whitelist (present certificate)`,
+			YAMLConfigPath:    "testdata/tls_config_noAuth.fingerprint_empty.good.yml",
+			UseTLSClient:      true,
+			ClientCertificate: "client_selfsigned",
+			ExpectedError:     ErrorMap["Bad certificate"],
+		},
+		{
+			Name:              `valid tls config yml and tls client with empty fingerprint whitelist (present certificate)`,
+			YAMLConfigPath:    "testdata/tls_config_noAuth.fingerprint_empty.good.yml",
 			UseTLSClient:      true,
 			ClientCertificate: "client2_selfsigned",
 			ExpectedError:     ErrorMap["Bad certificate"],
