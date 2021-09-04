@@ -20,7 +20,10 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
+	"sync"
+	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -30,13 +33,18 @@ import (
 )
 
 var (
-	errNoTLSConfig = errors.New("TLS config is not present")
+	errNoTLSConfig  = errors.New("TLS config is not present")
+	timestampFormat = log.TimestampFormat(
+		func() time.Time { return time.Now().UTC() },
+		"2006-01-02T15:04:05.000Z07:00",
+	)
 )
 
 type Config struct {
-	TLSConfig  TLSStruct                     `yaml:"tls_server_config"`
-	HTTPConfig HTTPStruct                    `yaml:"http_server_config"`
-	Users      map[string]config_util.Secret `yaml:"basic_auth_users"`
+	TLSConfig        TLSStruct                     `yaml:"tls_server_config"`
+	HTTPConfig       HTTPStruct                    `yaml:"http_server_config"`
+	RequestLogConfig RequestLogStruct              `yaml:"request_log_config"`
+	Users            map[string]config_util.Secret `yaml:"basic_auth_users"`
 }
 
 type TLSStruct struct {
@@ -62,6 +70,15 @@ type HTTPStruct struct {
 	HTTP2 bool `yaml:"http2"`
 }
 
+type RequestLogStruct struct {
+	File        string `yaml:"file"`
+	HeaderForIp string `yaml:"header_for_ip"`
+}
+
+func (r *RequestLogStruct) SetDirectory(dir string) {
+	r.File = config_util.JoinDir(dir, r.File)
+}
+
 func getConfig(configPath string) (*Config, error) {
 	content, err := ioutil.ReadFile(configPath)
 	if err != nil {
@@ -73,10 +90,12 @@ func getConfig(configPath string) (*Config, error) {
 			MaxVersion:               tls.VersionTLS13,
 			PreferServerCipherSuites: true,
 		},
-		HTTPConfig: HTTPStruct{HTTP2: true},
+		HTTPConfig:       HTTPStruct{HTTP2: true},
+		RequestLogConfig: RequestLogStruct{File: "", HeaderForIp: ""},
 	}
 	err = yaml.UnmarshalStrict(content, c)
 	c.TLSConfig.SetDirectory(filepath.Dir(configPath))
+	c.RequestLogConfig.SetDirectory(filepath.Dir(configPath))
 	return c, err
 }
 
@@ -207,11 +226,33 @@ func Serve(l net.Listener, server *http.Server, tlsConfigPath string, logger log
 		return err
 	}
 
-	server.Handler = &userAuthRoundtrip{
-		tlsConfigPath: tlsConfigPath,
-		logger:        logger,
-		handler:       handler,
-		cache:         newCache(),
+	if c.RequestLogConfig.File != "" {
+		f, err := os.OpenFile(c.RequestLogConfig.File, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+		if err != nil {
+			return err
+		}
+
+		defer f.Close()
+
+		server.Handler = &userAuthRoundtrip{
+			tlsConfigPath:     tlsConfigPath,
+			logger:            logger,
+			handler:           handler,
+			cache:             newCache(),
+			requestLogger:     log.With(log.NewJSONLogger(f), "ts", timestampFormat),
+			requestLoggerLock: sync.RWMutex{},
+		}
+
+		level.Info(logger).Log("msg", "Request logging is enabled.", "file", c.RequestLogConfig.File, "headerForIp", c.RequestLogConfig.HeaderForIp)
+	} else {
+		server.Handler = &userAuthRoundtrip{
+			tlsConfigPath: tlsConfigPath,
+			logger:        logger,
+			handler:       handler,
+			cache:         newCache(),
+		}
+
+		level.Info(logger).Log("msg", "Request logging is disabled.")
 	}
 
 	config, err := ConfigToTLSConfig(&c.TLSConfig)
