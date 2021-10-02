@@ -75,7 +75,7 @@ basic_auth_users:
   [ <string>: <secret> ... ]
 ```
 
-[A sample configuration file](web.yml) is provided.
+[A sample configuration file](web-config.yml) is provided.
 
 ## About bcrypt
 
