@@ -21,6 +21,7 @@ import (
 	"sync"
 
 	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -41,10 +42,12 @@ func validateUsers(configPath string) error {
 }
 
 type userAuthRoundtrip struct {
-	tlsConfigPath string
-	handler       http.Handler
-	logger        log.Logger
-	cache         *cache
+	tlsConfigPath     string
+	handler           http.Handler
+	logger            log.Logger
+	requestLogger     log.Logger
+	requestLoggerLock sync.RWMutex
+	cache             *cache
 	// bcryptMtx is there to ensure that bcrypt.CompareHashAndPassword is run
 	// only once in parallel as this is CPU intensive.
 	bcryptMtx sync.Mutex
@@ -89,10 +92,31 @@ func (u *userAuthRoundtrip) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		if authOk && validUser {
 			u.handler.ServeHTTP(w, r)
+			logRequest(u, r, c, true)
 			return
 		}
 	}
 
 	w.Header().Set("WWW-Authenticate", "Basic")
 	http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+
+	logRequest(u, r, c, false)
+}
+
+func logRequest(u *userAuthRoundtrip, r *http.Request, c *Config, authorized bool) {
+	u.requestLoggerLock.RLock()
+
+	if l := u.requestLogger; l != nil {
+		var ip = r.RemoteAddr
+
+		if c.RequestLogConfig.HeaderForIp != "" {
+			ip = r.Header.Get(c.RequestLogConfig.HeaderForIp)
+		}
+
+		if err := l.Log("path", r.URL.Path, "authorized", authorized, "ip", ip); err != nil {
+			level.Error(u.logger).Log("msg", "can't log query", "err", err)
+		}
+	}
+
+	u.requestLoggerLock.RUnlock()
 }
