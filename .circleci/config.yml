@@ -5,13 +5,6 @@ orbs:
   go: circleci/go@0.2.0
 
 jobs:
-  lint:
-    docker:
-    - image: circleci/golang:1.15
-    working_directory: /go/src/github.com/prometheus/exporter-toolkit
-    steps:
-    - checkout
-    - run: make lint
   test:
     parameters:
       go_version:
@@ -42,8 +35,7 @@ workflows:
   version: 2
   tests:
     jobs:
-    # Support the last two go relases, as per https://golang.org/dl/
-    - lint
+    # Support the last two go releases, as per https://golang.org/dl/.
     - test:
         name: go-1-14
         go_version: "1.14"
