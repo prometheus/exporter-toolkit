@@ -39,7 +39,7 @@ func TestBasicAuthCache(t *testing.T) {
 	})
 
 	go func() {
-		ListenAndServe(server, "testdata/tls_config_users_noTLS.good.yml", testlogger)
+		ListenAndServe(server, "testdata/web_config_users_noTLS.good.yml", testlogger)
 		close(done)
 	}()
 
@@ -103,7 +103,7 @@ func TestBasicAuthWithFakepassword(t *testing.T) {
 	})
 
 	go func() {
-		ListenAndServe(server, "testdata/tls_config_users_noTLS.good.yml", testlogger)
+		ListenAndServe(server, "testdata/web_config_users_noTLS.good.yml", testlogger)
 		close(done)
 	}()
 
@@ -127,4 +127,48 @@ func TestBasicAuthWithFakepassword(t *testing.T) {
 	login()
 	// Login with the response cached.
 	login()
+}
+
+// TestHTTPHeaders validates that HTTP headers are added correctly.
+func TestHTTPHeaders(t *testing.T) {
+	server := &http.Server{
+		Addr: port,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("Hello World!"))
+		}),
+	}
+
+	done := make(chan struct{})
+	t.Cleanup(func() {
+		if err := server.Shutdown(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		<-done
+	})
+
+	go func() {
+		ListenAndServe(server, "testdata/web_config_headers.good.yml", testlogger)
+		close(done)
+	}()
+
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", "http://localhost"+port, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for k, v := range map[string]string{
+		"Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+		"X-Frame-Options":           "deny",
+		"X-Content-Type-Options":    "nosniff",
+		"X-XSS-Protection":          "1",
+	} {
+		if got := r.Header.Get(k); got != v {
+			t.Fatalf("unexpected %s header value, expected %q, got %q", k, v, got)
+		}
+	}
 }
