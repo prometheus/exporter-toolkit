@@ -1,6 +1,6 @@
 ## 0.7.0 / 2021-10-19
 
-* [FEATURE] Add support for security-related HTTP Headers. #41
+* [FEATURE] Add support for security-related HTTP headers. #41
 
 ## 0.6.1 / 2021-06-30
 
