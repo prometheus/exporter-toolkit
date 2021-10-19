@@ -1,3 +1,7 @@
+## 0.7.0 / 2021-10-19
+
+* [FEATURE] Add support for security-related HTTP Headers. #41
+
 ## 0.6.1 / 2021-06-30
 
 * [BUGFIX] Allow RequireAnyClientCert as client_auth_type. #58
