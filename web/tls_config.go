@@ -34,9 +34,10 @@ var (
 )
 
 type Config struct {
-	TLSConfig  TLSStruct                     `yaml:"tls_server_config"`
-	HTTPConfig HTTPStruct                    `yaml:"http_server_config"`
-	Users      map[string]config_util.Secret `yaml:"basic_auth_users"`
+	TLSConfig         TLSStruct                     `yaml:"tls_server_config"`
+	HTTPConfig        HTTPStruct                    `yaml:"http_server_config"`
+	Users             map[string]config_util.Secret `yaml:"basic_auth_users"`
+	AuthExcludedPaths []string                      `yaml:"auth_excluded_paths"`
 }
 
 type TLSStruct struct {
@@ -211,11 +212,17 @@ func Serve(l net.Listener, server *http.Server, tlsConfigPath string, logger log
 		return err
 	}
 
+	authExcludedPaths := make(map[string]struct{})
+	for _, path := range c.AuthExcludedPaths {
+		authExcludedPaths[path] = struct{}{}
+	}
+
 	server.Handler = &webHandler{
-		tlsConfigPath: tlsConfigPath,
-		logger:        logger,
-		handler:       handler,
-		cache:         newCache(),
+		tlsConfigPath:     tlsConfigPath,
+		logger:            logger,
+		handler:           handler,
+		cache:             newCache(),
+		authExcludedPaths: authExcludedPaths,
 	}
 
 	config, err := ConfigToTLSConfig(&c.TLSConfig)

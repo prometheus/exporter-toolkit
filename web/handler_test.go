@@ -129,6 +129,48 @@ func TestBasicAuthWithFakepassword(t *testing.T) {
 	login()
 }
 
+// TestAuthExcludedPath validates that we auth is bypassed for the paths in
+// auth_excluded_paths.
+func TestAuthExcludedPath(t *testing.T) {
+	server := &http.Server{
+		Addr: port,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("Hello World!"))
+		}),
+	}
+
+	done := make(chan struct{})
+	t.Cleanup(func() {
+		if err := server.Shutdown(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		<-done
+	})
+
+	go func() {
+		ListenAndServe(server, "testdata/web_config_auth_excluded_paths.good.yml", testlogger)
+		close(done)
+	}()
+
+	makeRequest := func(path string, statusCode int) {
+		client := &http.Client{}
+		req, err := http.NewRequest("GET", "http://localhost"+port+path, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.StatusCode != statusCode {
+			t.Fatalf("bad return code, expected %d, got %d", statusCode, r.StatusCode)
+		}
+	}
+
+	makeRequest("/not-metrics", 401)
+	makeRequest("/metrics", 200)
+}
+
 // TestHTTPHeaders validates that HTTP headers are added correctly.
 func TestHTTPHeaders(t *testing.T) {
 	server := &http.Server{
