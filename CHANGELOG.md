@@ -1,3 +1,7 @@
+## 0.7.1 / 2021-12-02
+
+* [BUGFIX] Effectively enable HTTP/2 support. #72
+
 ## 0.7.0 / 2021-10-19
 
 * [FEATURE] Add support for security-related HTTP headers. #41
