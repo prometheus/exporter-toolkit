@@ -76,7 +76,7 @@ func getConfig(configPath string) (*Config, error) {
 		},
 		HTTPConfig: HTTPStruct{HTTP2: true},
 	}
-	err = yaml.UnmarshalStrict(content, c)
+	err = yaml.Unmarshal(content, c)
 	if err == nil {
 		err = validateHeaderConfig(c.HTTPConfig.Header)
 	}
