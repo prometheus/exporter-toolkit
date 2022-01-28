@@ -97,7 +97,8 @@ func (u *webHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(k, v)
 	}
 
-	if len(c.Users) == 0 {
+	// If OPTIONS method or none users configured then skip auth check
+	if r.Method == http.MethodOptions || len(c.Users) == 0 {
 		u.handler.ServeHTTP(w, r)
 		return
 	}
