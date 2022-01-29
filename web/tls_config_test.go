@@ -235,10 +235,10 @@ func TestServerBehaviour(t *testing.T) {
 			YAMLConfigPath: "testdata/web_config_noAuth_someCiphers.good.yml",
 			UseTLSClient:   true,
 			CipherSuites: []uint16{
-				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+				tls.TLS_RSA_WITH_AES_128_CBC_SHA,
 				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
 			},
-			ActualCipher:  tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			ActualCipher:  tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
 			ExpectedError: nil,
 		},
 		{
