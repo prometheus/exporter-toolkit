@@ -88,6 +88,7 @@ type TestInputs struct {
 	CurvePreferences    []tls.CurveID
 	Username            string
 	Password            string
+	ClientCertificate   string
 }
 
 func TestYAMLFiles(t *testing.T) {
@@ -309,6 +310,33 @@ func TestServerBehaviour(t *testing.T) {
 			YAMLConfigPath: "testdata/web_config_headers_extra_header.bad.yml",
 			ExpectedError:  ErrorMap["Invalid header"],
 		},
+		{
+			Name:              `valid tls config yml and tls client with RequireAnyClientCert (present certificate)`,
+			YAMLConfigPath:    "testdata/tls_config_noAuth.requireanyclientcert.good.yml",
+			UseTLSClient:      true,
+			ClientCertificate: "client_selfsigned",
+			ExpectedError:     nil,
+		},
+		{
+			Name:           `valid tls config yml and tls client with RequireAndVerifyClientCert`,
+			YAMLConfigPath: "testdata/tls_config_noAuth.requireandverifyclientcert.good.yml",
+			UseTLSClient:   true,
+			ExpectedError:  ErrorMap["Bad certificate"],
+		},
+		{
+			Name:              `valid tls config yml and tls client with RequireAndVerifyClientCert (present certificate)`,
+			YAMLConfigPath:    "testdata/tls_config_noAuth.requireandverifyclientcert.good.yml",
+			UseTLSClient:      true,
+			ClientCertificate: "client_selfsigned",
+			ExpectedError:     nil,
+		},
+		{
+			Name:              `valid tls config yml and tls client with RequireAndVerifyClientCert (present wrong certificate)`,
+			YAMLConfigPath:    "testdata/tls_config_noAuth.requireandverifyclientcert.good.yml",
+			UseTLSClient:      true,
+			ClientCertificate: "client2_selfsigned",
+			ExpectedError:     ErrorMap["Bad certificate"],
+		},
 	}
 	for _, testInputs := range testTables {
 		t.Run(testInputs.Name, testInputs.Test)
@@ -352,7 +380,7 @@ func TestConfigReloading(t *testing.T) {
 		recordConnectionError(err)
 	}()
 
-	client := getTLSClient()
+	client := getTLSClient("")
 
 	TestClientConnection := func() error {
 		time.Sleep(250 * time.Millisecond)
@@ -426,7 +454,7 @@ func (test *TestInputs) Test(t *testing.T) {
 		var client *http.Client
 		var proto string
 		if test.UseTLSClient {
-			client = getTLSClient()
+			client = getTLSClient(test.ClientCertificate)
 			t := client.Transport.(*http.Transport)
 			t.TLSClientConfig.MaxVersion = test.ClientMaxTLSVersion
 			if len(test.CipherSuites) > 0 {
@@ -518,11 +546,23 @@ func (test *TestInputs) isCorrectError(returnedError error) bool {
 	return true
 }
 
-func getTLSClient() *http.Client {
+func getTLSClient(clientCertName string) *http.Client {
 	cert, err := ioutil.ReadFile("testdata/tls-ca-chain.pem")
 	if err != nil {
 		panic("Unable to start TLS client. Check cert path")
 	}
+
+	var clientCertficate tls.Certificate
+	if clientCertName != "" {
+		clientCertficate, err = tls.LoadX509KeyPair(
+			"testdata/"+clientCertName+".pem",
+			"testdata/"+clientCertName+".key",
+		)
+		if err != nil {
+			panic(fmt.Sprintf("failed to load client certificate: %v", err))
+		}
+	}
+
 	client := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
@@ -531,6 +571,9 @@ func getTLSClient() *http.Client {
 					caCertPool.AppendCertsFromPEM(cert)
 					return caCertPool
 				}(),
+				GetClientCertificate: func(req *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+					return &clientCertficate, nil
+				},
 			},
 		},
 	}
