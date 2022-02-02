@@ -37,8 +37,8 @@ workflows:
     jobs:
     # Support the last two go releases, as per https://golang.org/dl/.
     - test:
-        name: go-1-14
-        go_version: "1.14"
+        name: go-1-16
+        go_version: "1.16"
     - test:
-        name: go-1-15
-        go_version: "1.15"
+        name: go-1-17
+        go_version: "1.17"

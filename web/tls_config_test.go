@@ -11,6 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build go1.14
 // +build go1.14
 
 package web
@@ -234,10 +235,10 @@ func TestServerBehaviour(t *testing.T) {
 			YAMLConfigPath: "testdata/web_config_noAuth_someCiphers.good.yml",
 			UseTLSClient:   true,
 			CipherSuites: []uint16{
+				tls.TLS_RSA_WITH_AES_128_CBC_SHA,
 				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
 			},
-			ActualCipher:  tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			ActualCipher:  tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
 			ExpectedError: nil,
 		},
 		{
@@ -460,8 +461,8 @@ func (test *TestInputs) Test(t *testing.T) {
 			if r.TLS.CipherSuite != test.ActualCipher {
 				recordConnectionError(
 					fmt.Errorf("bad cipher suite selected. Expected: %s, got: %s",
-						tls.CipherSuiteName(r.TLS.CipherSuite),
 						tls.CipherSuiteName(test.ActualCipher),
+						tls.CipherSuiteName(r.TLS.CipherSuite),
 					),
 				)
 			}
