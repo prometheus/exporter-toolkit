@@ -2,7 +2,7 @@
 version: 2.1
 
 orbs:
-  go: circleci/go@0.2.0
+  go: circleci/go@1.7.1
 
 jobs:
   test:
@@ -13,8 +13,10 @@ jobs:
         type: boolean
         default: true
     docker:
-    - image: circleci/golang:<< parameters.go_version >>
-    working_directory: /go/src/github.com/prometheus/exporter-toolkit
+    - image: cimg/go:<< parameters.go_version >>
+    environment:
+      # Override Go 1.18 security deprecations.
+      GODEBUG: "x509sha1=1,tls10default=1"
     steps:
     - checkout
     - when:
@@ -37,8 +39,8 @@ workflows:
     jobs:
     # Support the last two go releases, as per https://golang.org/dl/.
     - test:
-        name: go-1-16
-        go_version: "1.16"
-    - test:
         name: go-1-17
         go_version: "1.17"
+    - test:
+        name: go-1-18
+        go_version: "1.18"
