@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"path/filepath"
 
+	"github.com/coreos/go-systemd/v22/activation"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
@@ -186,6 +187,23 @@ func ListenAndServe(server *http.Server, tlsConfigPath string, logger log.Logger
 	}
 	defer listener.Close()
 	return Serve(listener, server, tlsConfigPath, logger)
+}
+
+// UseActivatedSocketAndServe starts the server on the systemd socket activated
+// listener. Based on the file tlsConfigPath, TLS or basic auth could be
+// enabled.
+func UseActivatedSocketAndServe(server *http.Server, tlsConfigPath string, logger log.Logger) error {
+	listeners, err := activation.Listeners()
+	if err != nil {
+		return err
+	}
+	if len(listeners) < 1 {
+		return errors.New("No socket activation file descriptors found")
+	}
+	if len(listeners) > 1 {
+		return errors.New("More than one socket activation file descriptor found")
+	}
+	return Serve(listeners[0], server, tlsConfigPath, logger)
 }
 
 // Server starts the server on the given listener. Based on the file
