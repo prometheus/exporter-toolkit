@@ -26,6 +26,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	config_util "github.com/prometheus/common/config"
+	"gopkg.in/yaml.v2"
 )
 
 var (
