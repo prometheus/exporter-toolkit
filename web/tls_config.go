@@ -28,7 +28,6 @@ import (
 	"github.com/go-kit/log/level"
 	config_util "github.com/prometheus/common/config"
 	"golang.org/x/sync/errgroup"
-	"gopkg.in/yaml.v2"
 )
 
 var (
@@ -51,6 +50,7 @@ type TLSConfig struct {
 	MinVersion               TLSVersion `yaml:"min_version"`
 	MaxVersion               TLSVersion `yaml:"max_version"`
 	PreferServerCipherSuites bool       `yaml:"prefer_server_cipher_suites"`
+	ClientCertAllowedCN      string     `yaml:"client_cert_allowed_cn"`
 }
 
 type FlagConfig struct {
@@ -161,6 +161,19 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 		}
 		clientCAPool.AppendCertsFromPEM(clientCAFile)
 		cfg.ClientCAs = clientCAPool
+	}
+
+	if c.ClientCertAllowedCN != "" {
+		cfg.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+			for _, chains := range verifiedChains {
+				if len(chains) != 0 {
+					if c.ClientCertAllowedCN == chains[0].Subject.CommonName {
+						return nil
+					}
+				}
+			}
+			return errors.New("CommonName authentication failed")
+		}
 	}
 
 	switch c.ClientAuth {

@@ -67,6 +67,7 @@ var (
 		"Bad certificate":          regexp.MustCompile(`bad certificate`),
 		"Invalid value":            regexp.MustCompile(`invalid value for`),
 		"Invalid header":           regexp.MustCompile(`HTTP header ".*" can not be configured`),
+		"Invalid common-name":          regexp.MustCompile(`CommonName authentication failed`),
 	}
 )
 
@@ -346,6 +347,20 @@ func TestServerBehaviour(t *testing.T) {
 			UseTLSClient:      true,
 			ClientCertificate: "client2_selfsigned",
 			ExpectedError:     ErrorMap["Bad certificate"],
+		},
+		{
+			Name:              `valid tls config yml with all curves`,
+			YAMLConfigPath:    "testdata/tls_config_noAuth.requireandverifyclientcert.good.yml",
+			UseTLSClient:      true,
+			ClientCertificate: "client_selfsigned",
+			ExpectedError:     nil,
+		},
+		{
+			Name:              `valid tls config yml and tls client with RequireAndVerifyClientCert (present wrong certificate)`,
+			YAMLConfigPath:    "testdata/tls_config_noAuth.requireandverifyclientcert.good.yml",
+			UseTLSClient:      true,
+			ClientCertificate: "client2_selfsigned",
+			ExpectedError:     ErrorMap["Invalid common-name"],
 		},
 	}
 	for _, testInputs := range testTables {

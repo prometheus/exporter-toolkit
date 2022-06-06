@@ -1,0 +1,6 @@
+tls_server_config:
+  cert_file: "server.crt"
+  key_file: "server.key"
+  client_auth_type: "RequireAndVerifyClientCert"
+  client_ca_file: "client_selfsigned.pem",
+  client_cert_allowed_cn: "prometheus.example.com"
