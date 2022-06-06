@@ -349,17 +349,17 @@ func TestServerBehaviour(t *testing.T) {
 			ExpectedError:     ErrorMap["Bad certificate"],
 		},
 		{
-			Name:              `valid tls config yml with all curves`,
-			YAMLConfigPath:    "testdata/tls_config_noAuth.requireandverifyclientcert.good.yml",
+			Name:              `valid tls config yml and tls client with VerifyPeerCertificate (present good common-name)`,
+			YAMLConfigPath:    "testdata/web_config_auth_client_common_name.good.yaml",
 			UseTLSClient:      true,
 			ClientCertificate: "client_selfsigned",
 			ExpectedError:     nil,
 		},
 		{
-			Name:              `valid tls config yml and tls client with RequireAndVerifyClientCert (present wrong certificate)`,
-			YAMLConfigPath:    "testdata/tls_config_noAuth.requireandverifyclientcert.good.yml",
+			Name:              `valid tls config yml and tls client with VerifyPeerCertificate (present invalid common-name)`,
+			YAMLConfigPath:    "testdata/web_config_auth_client_common_name.bad.yaml",
 			UseTLSClient:      true,
-			ClientCertificate: "client2_selfsigned",
+			ClientCertificate: "client_selfsigned",
 			ExpectedError:     ErrorMap["Invalid common-name"],
 		},
 	}
