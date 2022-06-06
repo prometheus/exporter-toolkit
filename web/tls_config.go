@@ -26,7 +26,6 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	config_util "github.com/prometheus/common/config"
-	"gopkg.in/yaml.v2"
 )
 
 var (
@@ -49,6 +48,7 @@ type TLSStruct struct {
 	MinVersion               tlsVersion `yaml:"min_version"`
 	MaxVersion               tlsVersion `yaml:"max_version"`
 	PreferServerCipherSuites bool       `yaml:"prefer_server_cipher_suites"`
+	ClientCertAllowedCN      string     `yaml:"client_cert_allowed_cn"`
 }
 
 // SetDirectory joins any relative file paths with dir.
@@ -153,6 +153,19 @@ func ConfigToTLSConfig(c *TLSStruct) (*tls.Config, error) {
 		}
 		clientCAPool.AppendCertsFromPEM(clientCAFile)
 		cfg.ClientCAs = clientCAPool
+	}
+
+	if c.ClientCertAllowedCN != "" {
+		cfg.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+			for _, chains := range verifiedChains {
+				if len(chains) != 0 {
+					if c.ClientCertAllowedCN == chains[0].Subject.CommonName {
+						return nil
+					}
+				}
+			}
+			return errors.New("CommonName authentication failed")
+		}
 	}
 
 	switch c.ClientAuth {
