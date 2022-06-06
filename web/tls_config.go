@@ -28,6 +28,7 @@ import (
 	"github.com/go-kit/log/level"
 	config_util "github.com/prometheus/common/config"
 	"golang.org/x/sync/errgroup"
+	"gopkg.in/yaml.v2"
 )
 
 var (
