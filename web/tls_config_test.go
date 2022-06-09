@@ -57,7 +57,7 @@ var (
 		"Bad certificate":              regexp.MustCompile(`bad certificate`),
 		"Invalid value":                regexp.MustCompile(`invalid value for`),
 		"Invalid header":               regexp.MustCompile(`HTTP header ".*" can not be configured`),
-		"Invalid common-name":          regexp.MustCompile(`CommonName authentication failed`),
+		"Invalid common-name":          regexp.MustCompile(`bad certificate`),
 	}
 )
 
