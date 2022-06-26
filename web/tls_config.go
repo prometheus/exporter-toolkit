@@ -27,6 +27,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	config_util "github.com/prometheus/common/config"
+	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v2"
 )
 
@@ -178,6 +179,20 @@ func ConfigToTLSConfig(c *TLSStruct) (*tls.Config, error) {
 	return cfg, nil
 }
 
+// ListenAndServe starts the server on the given listeners. Based on the file
+// tlsConfigPath, TLS or basic auth could be enabled.
+func ServeMultiple(listeners []net.Listener, server *http.Server, tlsConfigPath string, logger log.Logger) error {
+	errs := new(errgroup.Group)
+	for _, l := range listeners {
+		l := l
+		errs.Go(func() error {
+			level.Info(logger).Log("msg", "Listening on", "address", l.Addr().String())
+			return Serve(l, server, tlsConfigPath, logger)
+		})
+	}
+	return errs.Wait()
+}
+
 // ListenAndServe starts the server on the given address. Based on the file
 // tlsConfigPath, TLS or basic auth could be enabled.
 func ListenAndServe(server *http.Server, tlsConfigPath string, logger log.Logger) error {
@@ -189,10 +204,10 @@ func ListenAndServe(server *http.Server, tlsConfigPath string, logger log.Logger
 	return Serve(listener, server, tlsConfigPath, logger)
 }
 
-// UseActivatedSocketAndServe starts the server on the systemd socket activated
+// UseActivatedSocketsAndServe starts the server on the systemd socket activated
 // listener. Based on the file tlsConfigPath, TLS or basic auth could be
 // enabled.
-func UseActivatedSocketAndServe(server *http.Server, tlsConfigPath string, logger log.Logger) error {
+func UseActivatedSocketsAndServe(server *http.Server, tlsConfigPath string, logger log.Logger) error {
 	listeners, err := activation.Listeners()
 	if err != nil {
 		return err
@@ -200,17 +215,14 @@ func UseActivatedSocketAndServe(server *http.Server, tlsConfigPath string, logge
 	if len(listeners) < 1 {
 		return errors.New("No socket activation file descriptors found")
 	}
-	if len(listeners) > 1 {
-		return errors.New("More than one socket activation file descriptor found")
-	}
-	return Serve(listeners[0], server, tlsConfigPath, logger)
+	return ServeMultiple(listeners, server, tlsConfigPath, logger)
 }
 
 // Server starts the server on the given listener. Based on the file
 // tlsConfigPath, TLS or basic auth could be enabled.
 func Serve(l net.Listener, server *http.Server, tlsConfigPath string, logger log.Logger) error {
 	if tlsConfigPath == "" {
-		level.Info(logger).Log("msg", "TLS is disabled.", "http2", false)
+		level.Info(logger).Log("msg", "TLS is disabled.", "http2", false, "address", l.Addr().String())
 		return server.Serve(l)
 	}
 
@@ -243,10 +255,10 @@ func Serve(l net.Listener, server *http.Server, tlsConfigPath string, logger log
 			server.TLSNextProto = make(map[string]func(*http.Server, *tls.Conn, http.Handler))
 		}
 		// Valid TLS config.
-		level.Info(logger).Log("msg", "TLS is enabled.", "http2", c.HTTPConfig.HTTP2)
+		level.Info(logger).Log("msg", "TLS is enabled.", "http2", c.HTTPConfig.HTTP2, "address", l.Addr().String())
 	case errNoTLSConfig:
 		// No TLS config, back to plain HTTP.
-		level.Info(logger).Log("msg", "TLS is disabled.", "http2", false)
+		level.Info(logger).Log("msg", "TLS is disabled.", "http2", false, "address", l.Addr().String())
 		return server.Serve(l)
 	default:
 		// Invalid TLS config.
