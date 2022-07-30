@@ -21,9 +21,10 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
+	"os"
 	"regexp"
 	"sync"
 	"testing"
@@ -388,7 +389,7 @@ func TestConfigReloading(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		body, err := ioutil.ReadAll(r.Body)
+		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			return err
 		}
@@ -496,7 +497,7 @@ func (test *TestInputs) Test(t *testing.T) {
 			}
 		}
 
-		body, err := ioutil.ReadAll(r.Body)
+		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			recordConnectionError(err)
 			return
@@ -547,7 +548,7 @@ func (test *TestInputs) isCorrectError(returnedError error) bool {
 }
 
 func getTLSClient(clientCertName string) *http.Client {
-	cert, err := ioutil.ReadFile("testdata/tls-ca-chain.pem")
+	cert, err := os.ReadFile("testdata/tls-ca-chain.pem")
 	if err != nil {
 		panic("Unable to start TLS client. Check cert path")
 	}
@@ -581,19 +582,19 @@ func getTLSClient(clientCertName string) *http.Client {
 }
 
 func swapFileContents(file1, file2 string) error {
-	content1, err := ioutil.ReadFile(file1)
+	content1, err := os.ReadFile(file1)
 	if err != nil {
 		return err
 	}
-	content2, err := ioutil.ReadFile(file2)
+	content2, err := os.ReadFile(file2)
 	if err != nil {
 		return err
 	}
-	err = ioutil.WriteFile(file1, content2, 0644)
+	err = os.WriteFile(file1, content2, 0644)
 	if err != nil {
 		return err
 	}
-	err = ioutil.WriteFile(file2, content1, 0644)
+	err = os.WriteFile(file2, content1, 0644)
 	if err != nil {
 		return err
 	}
