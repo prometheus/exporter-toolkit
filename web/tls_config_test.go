@@ -54,10 +54,11 @@ var (
 		"Unknown curve":                regexp.MustCompile(`unknown curve`),
 		"Unknown TLS version":          regexp.MustCompile(`unknown TLS version`),
 		"No HTTP2 cipher":              regexp.MustCompile(`TLSConfig.CipherSuites is missing an HTTP/2-required`),
-		"Incompatible TLS version":     regexp.MustCompile(`protocol version not supported`),
-		"Bad certificate":              regexp.MustCompile(`bad certificate`),
-		"Invalid value":                regexp.MustCompile(`invalid value for`),
-		"Invalid header":               regexp.MustCompile(`HTTP header ".*" can not be configured`),
+		// The first token is returned by Go <= 1.17 and the second token is returned by Go >= 1.18.
+		"Incompatible TLS version": regexp.MustCompile(`protocol version not supported|no supported versions satisfy MinVersion and MaxVersion`),
+		"Bad certificate":          regexp.MustCompile(`bad certificate`),
+		"Invalid value":            regexp.MustCompile(`invalid value for`),
+		"Invalid header":           regexp.MustCompile(`HTTP header ".*" can not be configured`),
 	}
 )
 
