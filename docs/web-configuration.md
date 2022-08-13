@@ -97,6 +97,11 @@ http_server_config:
 # required. Passwords are hashed with bcrypt.
 basic_auth_users:
   [ <string>: <secret> ... ]
+
+# Exclude URL path from basic authentication. For example, health check or
+# metrics endpoints.
+basic_auth_excluded_paths:
+[ - <string> ]
 ```
 
 [A sample configuration file](web-config.yml) is provided.

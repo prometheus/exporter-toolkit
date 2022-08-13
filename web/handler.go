@@ -102,6 +102,13 @@ func (u *webHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	for _, path := range c.AuthExcludedPaths {
+		if path == r.URL.Path {
+			u.handler.ServeHTTP(w, r)
+			return
+		}
+	}
+
 	user, pass, auth := r.BasicAuth()
 	if auth {
 		hashedPassword, validUser := c.Users[user]
