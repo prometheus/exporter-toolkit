@@ -27,6 +27,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	config_util "github.com/prometheus/common/config"
+	"github.com/prometheus/exporter-toolkit/web/kingpinflag"
 	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v2"
 )
@@ -179,48 +180,53 @@ func ConfigToTLSConfig(c *TLSStruct) (*tls.Config, error) {
 	return cfg, nil
 }
 
-// ListenAndServe starts the server on the given listeners. Based on the file
-// tlsConfigPath, TLS or basic auth could be enabled.
-func ServeMultiple(listeners []net.Listener, server *http.Server, tlsConfigPath string, logger log.Logger) error {
+// ServeMultiple starts the server on the given listeners. The FlagStruct is
+// also passed on to Serve.
+func ServeMultiple(listeners []net.Listener, server *http.Server, flags *kingpinflag.FlagStruct, logger log.Logger) error {
 	errs := new(errgroup.Group)
 	for _, l := range listeners {
 		l := l
 		errs.Go(func() error {
-			level.Info(logger).Log("msg", "Listening on", "address", l.Addr().String())
-			return Serve(l, server, tlsConfigPath, logger)
+			return Serve(l, server, flags, logger)
 		})
 	}
 	return errs.Wait()
 }
 
-// ListenAndServe starts the server on the given address. Based on the file
-// tlsConfigPath, TLS or basic auth could be enabled.
-func ListenAndServe(server *http.Server, tlsConfigPath string, logger log.Logger) error {
-	listener, err := net.Listen("tcp", server.Addr)
-	if err != nil {
-		return err
+// ListenAndServe starts the server on addresses given in WebListenAddresses in
+// the FlagStruct or instead uses systemd socket activated listeners if
+// WebSystemdSocket in the FlagStruct is true. The FlagStruct is also passed on
+// to ServeMultiple.
+func ListenAndServe(server *http.Server, flags *kingpinflag.FlagStruct, logger log.Logger) error {
+	if *flags.WebSystemdSocket {
+		level.Info(logger).Log("msg", "Listening on systemd activated listeners instead of port listeners.")
+		listeners, err := activation.Listeners()
+		if err != nil {
+			return err
+		}
+		if len(listeners) < 1 {
+			return errors.New("No socket activation file descriptors found!")
+		}
+		return ServeMultiple(listeners, server, flags, logger)
+	} else {
+		listeners := make([]net.Listener, 0, len(*flags.WebListenAddresses))
+		for _, address := range *flags.WebListenAddresses {
+			listener, err := net.Listen("tcp", address)
+			if err != nil {
+				return err
+			}
+			defer listener.Close()
+			listeners = append(listeners, listener)
+		}
+		return ServeMultiple(listeners, server, flags, logger)
 	}
-	defer listener.Close()
-	return Serve(listener, server, tlsConfigPath, logger)
 }
 
-// UseActivatedSocketsAndServe starts the server on the systemd socket activated
-// listener. Based on the file tlsConfigPath, TLS or basic auth could be
-// enabled.
-func UseActivatedSocketsAndServe(server *http.Server, tlsConfigPath string, logger log.Logger) error {
-	listeners, err := activation.Listeners()
-	if err != nil {
-		return err
-	}
-	if len(listeners) < 1 {
-		return errors.New("No socket activation file descriptors found")
-	}
-	return ServeMultiple(listeners, server, tlsConfigPath, logger)
-}
-
-// Server starts the server on the given listener. Based on the file
-// tlsConfigPath, TLS or basic auth could be enabled.
-func Serve(l net.Listener, server *http.Server, tlsConfigPath string, logger log.Logger) error {
+// Server starts the server on the given listener. Based on the file path
+// WebConfigFile in the FlagStruct, TLS or basic auth could be enabled.
+func Serve(l net.Listener, server *http.Server, flags *kingpinflag.FlagStruct, logger log.Logger) error {
+	level.Info(logger).Log("msg", "Listening on", "address", l.Addr().String())
+	tlsConfigPath := *flags.WebConfigFile
 	if tlsConfigPath == "" {
 		level.Info(logger).Log("msg", "TLS is disabled.", "http2", false, "address", l.Addr().String())
 		return server.Serve(l)
@@ -386,6 +392,6 @@ func (tv *tlsVersion) MarshalYAML() (interface{}, error) {
 // tlsConfigPath, TLS or basic auth could be enabled.
 //
 // Deprecated: Use ListenAndServe instead.
-func Listen(server *http.Server, tlsConfigPath string, logger log.Logger) error {
-	return ListenAndServe(server, tlsConfigPath, logger)
+func Listen(server *http.Server, flags *kingpinflag.FlagStruct, logger log.Logger) error {
+	return ListenAndServe(server, flags, logger)
 }

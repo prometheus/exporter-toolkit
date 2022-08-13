@@ -16,11 +16,28 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
+type FlagStruct struct {
+    WebListenAddresses *[]string
+    WebSystemdSocket *bool
+    WebConfigFile *string
+}
+
 // AddFlags adds the flags used by this package to the Kingpin application.
 // To use the default Kingpin application, call AddFlags(kingpin.CommandLine)
-func AddFlags(a *kingpin.Application) *string {
-	return a.Flag(
-		"web.config.file",
-		"[EXPERIMENTAL] Path to configuration file that can enable TLS or authentication.",
-	).Default("").String()
+func AddFlags(a *kingpin.Application) *FlagStruct {
+	flags := FlagStruct{
+		WebListenAddresses: a.Flag(
+			"web.listen-address",
+			"Addresses on which to expose metrics and web interface.",
+		).Default(":9100").Strings(),
+		WebSystemdSocket: kingpin.Flag(
+			"web.systemd-socket",
+			"Use systemd socket activation listeners instead of port listeners.",
+		).Bool(),
+		WebConfigFile: a.Flag(
+			"web.config.file",
+			"[EXPERIMENTAL] Path to configuration file that can enable TLS or authentication.",
+		).Default("").String(),
+	}
+	return &flags
 }
