@@ -16,6 +16,7 @@ package web
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -24,7 +25,6 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
 	config_util "github.com/prometheus/common/config"
 	"gopkg.in/yaml.v2"
 )
@@ -109,7 +109,7 @@ func ConfigToTLSConfig(c *TLSStruct) (*tls.Config, error) {
 	loadCert := func() (*tls.Certificate, error) {
 		cert, err := tls.LoadX509KeyPair(c.TLSCertPath, c.TLSKeyPath)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to load X509KeyPair")
+			return nil, fmt.Errorf("failed to load X509KeyPair: %w", err)
 		}
 		return &cert, nil
 	}
