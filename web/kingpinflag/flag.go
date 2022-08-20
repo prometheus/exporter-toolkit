@@ -28,7 +28,7 @@ func AddFlags(a *kingpin.Application) *FlagStruct {
 	flags := FlagStruct{
 		WebListenAddresses: a.Flag(
 			"web.listen-address",
-			"Addresses on which to expose metrics and web interface.",
+			"Addresses on which to expose metrics and web interface. Repeatable for multiple addresses.",
 		).Default(":9100").Strings(),
 		WebSystemdSocket: kingpin.Flag(
 			"web.systemd-socket",
