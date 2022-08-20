@@ -17,9 +17,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 
 	"github.com/coreos/go-systemd/v22/activation"
@@ -67,7 +67,7 @@ type HTTPStruct struct {
 }
 
 func getConfig(configPath string) (*Config, error) {
-	content, err := ioutil.ReadFile(configPath)
+	content, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +150,7 @@ func ConfigToTLSConfig(c *TLSStruct) (*tls.Config, error) {
 
 	if c.ClientCAs != "" {
 		clientCAPool := x509.NewCertPool()
-		clientCAFile, err := ioutil.ReadFile(c.ClientCAs)
+		clientCAFile, err := os.ReadFile(c.ClientCAs)
 		if err != nil {
 			return nil, err
 		}
