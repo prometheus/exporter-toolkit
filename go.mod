@@ -8,6 +8,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/common v0.37.0
 	golang.org/x/crypto v0.0.0-20220315160706-3147a52a75dd
+	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/yaml.v2 v2.4.0
 )
