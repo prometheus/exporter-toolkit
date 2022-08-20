@@ -17,9 +17,9 @@ import (
 )
 
 type FlagStruct struct {
-    WebListenAddresses *[]string
-    WebSystemdSocket *bool
-    WebConfigFile *string
+	WebListenAddresses *[]string
+	WebSystemdSocket   *bool
+	WebConfigFile      *string
 }
 
 // AddFlags adds the flags used by this package to the Kingpin application.
