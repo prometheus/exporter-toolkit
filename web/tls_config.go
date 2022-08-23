@@ -205,21 +205,20 @@ func ListenAndServe(server *http.Server, flags *kingpinflag.FlagStruct, logger l
 			return err
 		}
 		if len(listeners) < 1 {
-			return errors.New("No socket activation file descriptors found!")
-		}
-		return ServeMultiple(listeners, server, flags, logger)
-	} else {
-		listeners := make([]net.Listener, 0, len(*flags.WebListenAddresses))
-		for _, address := range *flags.WebListenAddresses {
-			listener, err := net.Listen("tcp", address)
-			if err != nil {
-				return err
-			}
-			defer listener.Close()
-			listeners = append(listeners, listener)
+			return errors.New("no socket activation file descriptors found")
 		}
 		return ServeMultiple(listeners, server, flags, logger)
 	}
+	listeners := make([]net.Listener, 0, len(*flags.WebListenAddresses))
+	for _, address := range *flags.WebListenAddresses {
+		listener, err := net.Listen("tcp", address)
+		if err != nil {
+			return err
+		}
+		defer listener.Close()
+		listeners = append(listeners, listener)
+	}
+	return ServeMultiple(listeners, server, flags, logger)
 }
 
 // Server starts the server on the given listener. Based on the file path

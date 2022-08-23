@@ -41,9 +41,9 @@ func TestBasicAuthCache(t *testing.T) {
 
 	go func() {
 		flags := kingpinflag.FlagStruct{
-			WebListenAddresses: Of([]string{port}),
-			WebSystemdSocket:   Of(false),
-			WebConfigFile:      Of("testdata/web_config_users_noTLS.good.yml"),
+			WebListenAddresses: &([]string{port}),
+			WebSystemdSocket:   OfBool(false),
+			WebConfigFile:      OfString("testdata/web_config_users_noTLS.good.yml"),
 		}
 		ListenAndServe(server, &flags, testlogger)
 		close(done)
@@ -109,9 +109,9 @@ func TestBasicAuthWithFakepassword(t *testing.T) {
 
 	go func() {
 		flags := kingpinflag.FlagStruct{
-			WebListenAddresses: Of([]string{port}),
-			WebSystemdSocket:   Of(false),
-			WebConfigFile:      Of("testdata/web_config_users_noTLS.good.yml"),
+			WebListenAddresses: &([]string{port}),
+			WebSystemdSocket:   OfBool(false),
+			WebConfigFile:      OfString("testdata/web_config_users_noTLS.good.yml"),
 		}
 		ListenAndServe(server, &flags, testlogger)
 		close(done)
@@ -157,9 +157,9 @@ func TestHTTPHeaders(t *testing.T) {
 
 	go func() {
 		flags := kingpinflag.FlagStruct{
-			WebListenAddresses: Of([]string{port}),
-			WebSystemdSocket:   Of(false),
-			WebConfigFile:      Of("testdata/web_config_headers.good.yml"),
+			WebListenAddresses: &([]string{port}),
+			WebSystemdSocket:   OfBool(false),
+			WebConfigFile:      OfString("testdata/web_config_headers.good.yml"),
 		}
 		ListenAndServe(server, &flags, testlogger)
 		close(done)
