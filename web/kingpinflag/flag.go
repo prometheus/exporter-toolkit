@@ -14,18 +14,14 @@ package kingpinflag
 
 import (
 	"gopkg.in/alecthomas/kingpin.v2"
-)
 
-type FlagStruct struct {
-	WebListenAddresses *[]string
-	WebSystemdSocket   *bool
-	WebConfigFile      *string
-}
+	"github.com/prometheus/exporter-toolkit/web"
+)
 
 // AddFlags adds the flags used by this package to the Kingpin application.
 // To use the default Kingpin application, call AddFlags(kingpin.CommandLine)
-func AddFlags(a *kingpin.Application) *FlagStruct {
-	flags := FlagStruct{
+func AddFlags(a *kingpin.Application) *web.FlagStruct {
+	flags := web.FlagStruct{
 		WebListenAddresses: a.Flag(
 			"web.listen-address",
 			"Addresses on which to expose metrics and web interface. Repeatable for multiple addresses.",

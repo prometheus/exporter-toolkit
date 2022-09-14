@@ -18,8 +18,6 @@ import (
 	"net/http"
 	"sync"
 	"testing"
-
-	"github.com/prometheus/exporter-toolkit/web/kingpinflag"
 )
 
 // TestBasicAuthCache validates that the cache is working by calling a password
@@ -40,7 +38,7 @@ func TestBasicAuthCache(t *testing.T) {
 	})
 
 	go func() {
-		flags := kingpinflag.FlagStruct{
+		flags := FlagStruct{
 			WebListenAddresses: &([]string{port}),
 			WebSystemdSocket:   OfBool(false),
 			WebConfigFile:      OfString("testdata/web_config_users_noTLS.good.yml"),
@@ -108,7 +106,7 @@ func TestBasicAuthWithFakepassword(t *testing.T) {
 	})
 
 	go func() {
-		flags := kingpinflag.FlagStruct{
+		flags := FlagStruct{
 			WebListenAddresses: &([]string{port}),
 			WebSystemdSocket:   OfBool(false),
 			WebConfigFile:      OfString("testdata/web_config_users_noTLS.good.yml"),
@@ -156,7 +154,7 @@ func TestHTTPHeaders(t *testing.T) {
 	})
 
 	go func() {
-		flags := kingpinflag.FlagStruct{
+		flags := FlagStruct{
 			WebListenAddresses: &([]string{port}),
 			WebSystemdSocket:   OfBool(false),
 			WebConfigFile:      OfString("testdata/web_config_headers.good.yml"),

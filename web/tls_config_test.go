@@ -29,8 +29,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/prometheus/exporter-toolkit/web/kingpinflag"
 )
 
 // Helpers for literal FlagStruct
@@ -387,7 +385,7 @@ func TestConfigReloading(t *testing.T) {
 				recordConnectionError(errors.New("Panic starting server"))
 			}
 		}()
-		flagsBadYAMLPath := kingpinflag.FlagStruct{WebConfigFile: OfString(badYAMLPath)}
+		flagsBadYAMLPath := FlagStruct{WebConfigFile: OfString(badYAMLPath)}
 		err := Listen(server, &flagsBadYAMLPath, testlogger)
 		recordConnectionError(err)
 	}()
@@ -457,7 +455,7 @@ func (test *TestInputs) Test(t *testing.T) {
 				recordConnectionError(errors.New("Panic starting server"))
 			}
 		}()
-		flags := kingpinflag.FlagStruct{
+		flags := FlagStruct{
 			WebListenAddresses: &([]string{port}),
 			WebSystemdSocket:   OfBool(false),
 			WebConfigFile:      &test.YAMLConfigPath,

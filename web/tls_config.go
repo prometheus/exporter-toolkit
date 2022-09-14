@@ -27,7 +27,6 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	config_util "github.com/prometheus/common/config"
-	"github.com/prometheus/exporter-toolkit/web/kingpinflag"
 	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v2"
 )
@@ -52,6 +51,12 @@ type TLSStruct struct {
 	MinVersion               tlsVersion `yaml:"min_version"`
 	MaxVersion               tlsVersion `yaml:"max_version"`
 	PreferServerCipherSuites bool       `yaml:"prefer_server_cipher_suites"`
+}
+
+type FlagStruct struct {
+	WebListenAddresses *[]string
+	WebSystemdSocket   *bool
+	WebConfigFile      *string
 }
 
 // SetDirectory joins any relative file paths with dir.
@@ -182,7 +187,7 @@ func ConfigToTLSConfig(c *TLSStruct) (*tls.Config, error) {
 
 // ServeMultiple starts the server on the given listeners. The FlagStruct is
 // also passed on to Serve.
-func ServeMultiple(listeners []net.Listener, server *http.Server, flags *kingpinflag.FlagStruct, logger log.Logger) error {
+func ServeMultiple(listeners []net.Listener, server *http.Server, flags *FlagStruct, logger log.Logger) error {
 	errs := new(errgroup.Group)
 	for _, l := range listeners {
 		l := l
@@ -197,7 +202,7 @@ func ServeMultiple(listeners []net.Listener, server *http.Server, flags *kingpin
 // the FlagStruct or instead uses systemd socket activated listeners if
 // WebSystemdSocket in the FlagStruct is true. The FlagStruct is also passed on
 // to ServeMultiple.
-func ListenAndServe(server *http.Server, flags *kingpinflag.FlagStruct, logger log.Logger) error {
+func ListenAndServe(server *http.Server, flags *FlagStruct, logger log.Logger) error {
 	if *flags.WebSystemdSocket {
 		level.Info(logger).Log("msg", "Listening on systemd activated listeners instead of port listeners.")
 		listeners, err := activation.Listeners()
@@ -223,7 +228,7 @@ func ListenAndServe(server *http.Server, flags *kingpinflag.FlagStruct, logger l
 
 // Server starts the server on the given listener. Based on the file path
 // WebConfigFile in the FlagStruct, TLS or basic auth could be enabled.
-func Serve(l net.Listener, server *http.Server, flags *kingpinflag.FlagStruct, logger log.Logger) error {
+func Serve(l net.Listener, server *http.Server, flags *FlagStruct, logger log.Logger) error {
 	level.Info(logger).Log("msg", "Listening on", "address", l.Addr().String())
 	tlsConfigPath := *flags.WebConfigFile
 	if tlsConfigPath == "" {
@@ -391,6 +396,6 @@ func (tv *tlsVersion) MarshalYAML() (interface{}, error) {
 // tlsConfigPath, TLS or basic auth could be enabled.
 //
 // Deprecated: Use ListenAndServe instead.
-func Listen(server *http.Server, flags *kingpinflag.FlagStruct, logger log.Logger) error {
+func Listen(server *http.Server, flags *FlagStruct, logger log.Logger) error {
 	return ListenAndServe(server, flags, logger)
 }
