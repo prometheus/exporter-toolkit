@@ -81,10 +81,18 @@ type webHandler struct {
 	cache         *cache
 	// bcryptMtx is there to ensure that bcrypt.CompareHashAndPassword is run
 	// only once in parallel as this is CPU intensive.
-	bcryptMtx sync.Mutex
+	bcryptMtx         sync.Mutex
+	authExcludedPaths map[string]struct{}
 }
 
 func (u *webHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Check if path has auth excluded.
+	if _, ok := u.authExcludedPaths[r.URL.Path]; ok {
+		u.logger.Log("msg", "Bypassing auth, path in auth_excluded_paths", "path", r.URL.Path)
+		u.handler.ServeHTTP(w, r)
+		return
+	}
+
 	c, err := getConfig(u.tlsConfigPath)
 	if err != nil {
 		u.logger.Log("msg", "Unable to parse configuration", "err", err)
