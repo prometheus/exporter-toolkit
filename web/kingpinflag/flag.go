@@ -28,7 +28,7 @@ func AddFlags(a *kingpin.Application) *web.FlagStruct {
 		).Default(":9100").Strings(),
 		WebSystemdSocket: kingpin.Flag(
 			"web.systemd-socket",
-			"Use systemd socket activation listeners instead of port listeners.",
+			"Use systemd socket activation listeners instead of port listeners (Linux only).",
 		).Bool(),
 		WebConfigFile: a.Flag(
 			"web.config.file",
