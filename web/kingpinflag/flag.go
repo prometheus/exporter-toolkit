@@ -14,6 +14,7 @@ package kingpinflag
 
 import (
 	"runtime"
+	"strconv"
 
 	"gopkg.in/alecthomas/kingpin.v2"
 
@@ -22,7 +23,7 @@ import (
 
 // AddFlags adds the flags used by this package to the Kingpin application.
 // To use the default Kingpin application, call AddFlags(kingpin.CommandLine)
-func AddFlags(a *kingpin.Application) *web.FlagStruct {
+func AddFlags(a *kingpin.Application, defaultPort uint16) *web.FlagStruct {
 	systemdSocket := func() *bool { b := false; return &b }() // Socket activation only available on Linux
 	if runtime.GOOS == "linux" {
 		systemdSocket = kingpin.Flag(
@@ -34,7 +35,7 @@ func AddFlags(a *kingpin.Application) *web.FlagStruct {
 		WebListenAddresses: a.Flag(
 			"web.listen-address",
 			"Addresses on which to expose metrics and web interface. Repeatable for multiple addresses.",
-		).Default(":9100").Strings(),
+		).Default(":" + strconv.FormatUint(uint64(defaultPort), 10)).Strings(),
 		WebSystemdSocket: systemdSocket,
 		WebConfigFile: a.Flag(
 			"web.config.file",
