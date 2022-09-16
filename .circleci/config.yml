@@ -14,9 +14,6 @@ jobs:
         default: true
     docker:
     - image: cimg/go:<< parameters.go_version >>
-    environment:
-      # Override Go 1.18 security deprecations.
-      GODEBUG: "x509sha1=1,tls10default=1"
     steps:
     - checkout
     - when:
@@ -44,3 +41,6 @@ workflows:
     - test:
         name: go-1-18
         go_version: "1.18"
+    - test:
+        name: go-1-19
+        go_version: "1.19"
