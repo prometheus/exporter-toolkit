@@ -31,7 +31,7 @@ import (
 	"time"
 )
 
-// Helpers for literal FlagStruct
+// Helpers for literal FlagConfig
 func OfBool(i bool) *bool {
 	return &i
 }
@@ -385,7 +385,7 @@ func TestConfigReloading(t *testing.T) {
 				recordConnectionError(errors.New("Panic starting server"))
 			}
 		}()
-		flagsBadYAMLPath := FlagStruct{WebConfigFile: OfString(badYAMLPath)}
+		flagsBadYAMLPath := FlagConfig{WebConfigFile: OfString(badYAMLPath)}
 		err := Listen(server, &flagsBadYAMLPath, testlogger)
 		recordConnectionError(err)
 	}()
@@ -455,7 +455,7 @@ func (test *TestInputs) Test(t *testing.T) {
 				recordConnectionError(errors.New("Panic starting server"))
 			}
 		}()
-		flags := FlagStruct{
+		flags := FlagConfig{
 			WebListenAddresses: &([]string{port}),
 			WebSystemdSocket:   OfBool(false),
 			WebConfigFile:      &test.YAMLConfigPath,

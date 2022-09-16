@@ -23,7 +23,7 @@ import (
 // AddFlags adds the flags used by this package to the Kingpin application.
 // To use the default Kingpin application, call
 // AddFlags(kingpin.CommandLine, ":portNum") where portNum is the default port.
-func AddFlags(a *kingpin.Application, defaultAddress string) *web.FlagStruct {
+func AddFlags(a *kingpin.Application, defaultAddress string) *web.FlagConfig {
 	systemdSocket := func() *bool { b := false; return &b }() // Socket activation only available on Linux
 	if runtime.GOOS == "linux" {
 		systemdSocket = kingpin.Flag(
@@ -31,7 +31,7 @@ func AddFlags(a *kingpin.Application, defaultAddress string) *web.FlagStruct {
 			"Use systemd socket activation listeners instead of port listeners (Linux only).",
 		).Bool()
 	}
-	flags := web.FlagStruct{
+	flags := web.FlagConfig{
 		WebListenAddresses: a.Flag(
 			"web.listen-address",
 			"Addresses on which to expose metrics and web interface. Repeatable for multiple addresses.",

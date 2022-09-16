@@ -53,7 +53,7 @@ type TLSStruct struct {
 	PreferServerCipherSuites bool       `yaml:"prefer_server_cipher_suites"`
 }
 
-type FlagStruct struct {
+type FlagConfig struct {
 	WebListenAddresses *[]string
 	WebSystemdSocket   *bool
 	WebConfigFile      *string
@@ -185,9 +185,9 @@ func ConfigToTLSConfig(c *TLSStruct) (*tls.Config, error) {
 	return cfg, nil
 }
 
-// ServeMultiple starts the server on the given listeners. The FlagStruct is
+// ServeMultiple starts the server on the given listeners. The FlagConfig is
 // also passed on to Serve.
-func ServeMultiple(listeners []net.Listener, server *http.Server, flags *FlagStruct, logger log.Logger) error {
+func ServeMultiple(listeners []net.Listener, server *http.Server, flags *FlagConfig, logger log.Logger) error {
 	errs := new(errgroup.Group)
 	for _, l := range listeners {
 		l := l
@@ -199,10 +199,10 @@ func ServeMultiple(listeners []net.Listener, server *http.Server, flags *FlagStr
 }
 
 // ListenAndServe starts the server on addresses given in WebListenAddresses in
-// the FlagStruct or instead uses systemd socket activated listeners if
-// WebSystemdSocket in the FlagStruct is true. The FlagStruct is also passed on
+// the FlagConfig or instead uses systemd socket activated listeners if
+// WebSystemdSocket in the FlagConfig is true. The FlagConfig is also passed on
 // to ServeMultiple.
-func ListenAndServe(server *http.Server, flags *FlagStruct, logger log.Logger) error {
+func ListenAndServe(server *http.Server, flags *FlagConfig, logger log.Logger) error {
 	if *flags.WebSystemdSocket {
 		level.Info(logger).Log("msg", "Listening on systemd activated listeners instead of port listeners.")
 		listeners, err := activation.Listeners()
@@ -227,8 +227,8 @@ func ListenAndServe(server *http.Server, flags *FlagStruct, logger log.Logger) e
 }
 
 // Server starts the server on the given listener. Based on the file path
-// WebConfigFile in the FlagStruct, TLS or basic auth could be enabled.
-func Serve(l net.Listener, server *http.Server, flags *FlagStruct, logger log.Logger) error {
+// WebConfigFile in the FlagConfig, TLS or basic auth could be enabled.
+func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger log.Logger) error {
 	level.Info(logger).Log("msg", "Listening on", "address", l.Addr().String())
 	tlsConfigPath := *flags.WebConfigFile
 	if tlsConfigPath == "" {
@@ -396,6 +396,6 @@ func (tv *tlsVersion) MarshalYAML() (interface{}, error) {
 // tlsConfigPath, TLS or basic auth could be enabled.
 //
 // Deprecated: Use ListenAndServe instead.
-func Listen(server *http.Server, flags *FlagStruct, logger log.Logger) error {
+func Listen(server *http.Server, flags *FlagConfig, logger log.Logger) error {
 	return ListenAndServe(server, flags, logger)
 }
