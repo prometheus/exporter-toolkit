@@ -41,3 +41,6 @@ workflows:
     - test:
         name: go-1-18
         go_version: "1.18"
+    - test:
+        name: go-1-19
+        go_version: "1.19"
