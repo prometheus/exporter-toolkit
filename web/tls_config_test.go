@@ -617,6 +617,11 @@ func TestUsers(t *testing.T) {
 			ExpectedError:  nil,
 		},
 		{
+			Name:           `with correct basic auth and exclude path`,
+			YAMLConfigPath: "testdata/web_config_users_noTLS_excludePath.good.yml",
+			ExpectedError:  nil,
+		},
+		{
 			Name:           `without basic auth and TLS`,
 			YAMLConfigPath: "testdata/web_config_users.good.yml",
 			UseTLSClient:   true,

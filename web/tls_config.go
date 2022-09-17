@@ -34,9 +34,10 @@ var (
 )
 
 type Config struct {
-	TLSConfig  TLSStruct                     `yaml:"tls_server_config"`
-	HTTPConfig HTTPStruct                    `yaml:"http_server_config"`
-	Users      map[string]config_util.Secret `yaml:"basic_auth_users"`
+	TLSConfig         TLSStruct                     `yaml:"tls_server_config"`
+	HTTPConfig        HTTPStruct                    `yaml:"http_server_config"`
+	Users             map[string]config_util.Secret `yaml:"basic_auth_users"`
+	AuthExcludedPaths []string                      `yaml:"basic_auth_excluded_paths"`
 }
 
 type TLSStruct struct {

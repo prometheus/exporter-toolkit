@@ -10,3 +10,8 @@ tls_server_config:
 basic_auth_users:
   alice: $2y$10$mDwo.lAisC94iLAyP81MCesa29IzH37oigHC/42V2pdJlUprsJPze
   bob: $2y$10$hLqFl9jSjoAAy95Z/zw8Ye8wkdMBM8c5Bn1ptYqP/AXyV0.oy0S8m
+
+# Exclude /-/healthy and /-/ready from basic authentication
+basic_auth_excluded_paths:
+- /-/healthy
+- /-/ready
