@@ -34,12 +34,12 @@ var (
 )
 
 type Config struct {
-	TLSConfig  TLSStruct                     `yaml:"tls_server_config"`
-	HTTPConfig HTTPStruct                    `yaml:"http_server_config"`
+	TLSConfig  TLSConfig                     `yaml:"tls_server_config"`
+	HTTPConfig HTTPConfig                    `yaml:"http_server_config"`
 	Users      map[string]config_util.Secret `yaml:"basic_auth_users"`
 }
 
-type TLSStruct struct {
+type TLSConfig struct {
 	TLSCertPath              string     `yaml:"cert_file"`
 	TLSKeyPath               string     `yaml:"key_file"`
 	ClientAuth               string     `yaml:"client_auth_type"`
@@ -52,13 +52,13 @@ type TLSStruct struct {
 }
 
 // SetDirectory joins any relative file paths with dir.
-func (t *TLSStruct) SetDirectory(dir string) {
+func (t *TLSConfig) SetDirectory(dir string) {
 	t.TLSCertPath = config_util.JoinDir(dir, t.TLSCertPath)
 	t.TLSKeyPath = config_util.JoinDir(dir, t.TLSKeyPath)
 	t.ClientCAs = config_util.JoinDir(dir, t.ClientCAs)
 }
 
-type HTTPStruct struct {
+type HTTPConfig struct {
 	HTTP2  bool              `yaml:"http2"`
 	Header map[string]string `yaml:"headers,omitempty"`
 }
@@ -69,12 +69,12 @@ func getConfig(configPath string) (*Config, error) {
 		return nil, err
 	}
 	c := &Config{
-		TLSConfig: TLSStruct{
+		TLSConfig: TLSConfig{
 			MinVersion:               tls.VersionTLS12,
 			MaxVersion:               tls.VersionTLS13,
 			PreferServerCipherSuites: true,
 		},
-		HTTPConfig: HTTPStruct{HTTP2: true},
+		HTTPConfig: HTTPConfig{HTTP2: true},
 	}
 	err = yaml.UnmarshalStrict(content, c)
 	if err == nil {
@@ -92,8 +92,8 @@ func getTLSConfig(configPath string) (*tls.Config, error) {
 	return ConfigToTLSConfig(&c.TLSConfig)
 }
 
-// ConfigToTLSConfig generates the golang tls.Config from the TLSStruct config.
-func ConfigToTLSConfig(c *TLSStruct) (*tls.Config, error) {
+// ConfigToTLSConfig generates the golang tls.Config from the TLSConfig struct.
+func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 	if c.TLSCertPath == "" && c.TLSKeyPath == "" && c.ClientAuth == "" && c.ClientCAs == "" {
 		return nil, errNoTLSConfig
 	}
