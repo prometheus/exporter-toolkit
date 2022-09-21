@@ -386,7 +386,11 @@ func TestConfigReloading(t *testing.T) {
 				recordConnectionError(errors.New("Panic starting server"))
 			}
 		}()
-		flagsBadYAMLPath := FlagConfig{WebConfigFile: OfString(badYAMLPath)}
+		flagsBadYAMLPath := FlagConfig{
+			WebListenAddresses: &([]string{port}),
+			WebSystemdSocket:   OfBool(false),
+			WebConfigFile:      OfString(badYAMLPath),
+		}
 		err := Listen(server, &flagsBadYAMLPath, testlogger)
 		recordConnectionError(err)
 	}()
