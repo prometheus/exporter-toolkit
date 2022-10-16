@@ -308,7 +308,7 @@ func TestServerBehaviour(t *testing.T) {
 			ExpectedError:  ErrorMap["Invalid value"],
 		},
 		{
-			Name:           `HTTP header that can not be overriden`,
+			Name:           `HTTP header that can not be overridden`,
 			YAMLConfigPath: "testdata/web_config_headers_extra_header.bad.yml",
 			ExpectedError:  ErrorMap["Invalid header"],
 		},

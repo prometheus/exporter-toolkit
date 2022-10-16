@@ -1,5 +1,7 @@
 linters:
   enable:
+  - goimports
+  - misspell
   - revive
 
 issues:
