@@ -1,6 +1,6 @@
 linters:
   enable:
-  - golint
+  - revive
 
 issues:
   exclude-rules:
