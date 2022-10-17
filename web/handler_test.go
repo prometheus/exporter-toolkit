@@ -24,7 +24,6 @@ import (
 // protected endpoint multiple times.
 func TestBasicAuthCache(t *testing.T) {
 	server := &http.Server{
-		Addr: port,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("Hello World!"))
 		}),
@@ -39,7 +38,12 @@ func TestBasicAuthCache(t *testing.T) {
 	})
 
 	go func() {
-		ListenAndServe(server, "testdata/web_config_users_noTLS.good.yml", testlogger)
+		flags := FlagConfig{
+			WebListenAddresses: &([]string{port}),
+			WebSystemdSocket:   OfBool(false),
+			WebConfigFile:      OfString("testdata/web_config_users_noTLS.good.yml"),
+		}
+		ListenAndServe(server, &flags, testlogger)
 		close(done)
 	}()
 
@@ -88,7 +92,6 @@ func TestBasicAuthCache(t *testing.T) {
 // to prevent user enumeration.
 func TestBasicAuthWithFakepassword(t *testing.T) {
 	server := &http.Server{
-		Addr: port,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("Hello World!"))
 		}),
@@ -103,7 +106,12 @@ func TestBasicAuthWithFakepassword(t *testing.T) {
 	})
 
 	go func() {
-		ListenAndServe(server, "testdata/web_config_users_noTLS.good.yml", testlogger)
+		flags := FlagConfig{
+			WebListenAddresses: &([]string{port}),
+			WebSystemdSocket:   OfBool(false),
+			WebConfigFile:      OfString("testdata/web_config_users_noTLS.good.yml"),
+		}
+		ListenAndServe(server, &flags, testlogger)
 		close(done)
 	}()
 
@@ -132,7 +140,6 @@ func TestBasicAuthWithFakepassword(t *testing.T) {
 // TestHTTPHeaders validates that HTTP headers are added correctly.
 func TestHTTPHeaders(t *testing.T) {
 	server := &http.Server{
-		Addr: port,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("Hello World!"))
 		}),
@@ -147,7 +154,12 @@ func TestHTTPHeaders(t *testing.T) {
 	})
 
 	go func() {
-		ListenAndServe(server, "testdata/web_config_headers.good.yml", testlogger)
+		flags := FlagConfig{
+			WebListenAddresses: &([]string{port}),
+			WebSystemdSocket:   OfBool(false),
+			WebConfigFile:      OfString("testdata/web_config_headers.good.yml"),
+		}
+		ListenAndServe(server, &flags, testlogger)
 		close(done)
 	}()
 

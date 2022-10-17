@@ -13,14 +13,34 @@
 package kingpinflag
 
 import (
+	"runtime"
+
 	"gopkg.in/alecthomas/kingpin.v2"
+
+	"github.com/prometheus/exporter-toolkit/web"
 )
 
 // AddFlags adds the flags used by this package to the Kingpin application.
-// To use the default Kingpin application, call AddFlags(kingpin.CommandLine)
-func AddFlags(a *kingpin.Application) *string {
-	return a.Flag(
-		"web.config.file",
-		"[EXPERIMENTAL] Path to configuration file that can enable TLS or authentication.",
-	).Default("").String()
+// To use the default Kingpin application, call
+// AddFlags(kingpin.CommandLine, ":portNum") where portNum is the default port.
+func AddFlags(a *kingpin.Application, defaultAddress string) *web.FlagConfig {
+	systemdSocket := func() *bool { b := false; return &b }() // Socket activation only available on Linux
+	if runtime.GOOS == "linux" {
+		systemdSocket = kingpin.Flag(
+			"web.systemd-socket",
+			"Use systemd socket activation listeners instead of port listeners (Linux only).",
+		).Bool()
+	}
+	flags := web.FlagConfig{
+		WebListenAddresses: a.Flag(
+			"web.listen-address",
+			"Addresses on which to expose metrics and web interface. Repeatable for multiple addresses.",
+		).Default(defaultAddress).Strings(),
+		WebSystemdSocket: systemdSocket,
+		WebConfigFile: a.Flag(
+			"web.config.file",
+			"[EXPERIMENTAL] Path to configuration file that can enable TLS or authentication.",
+		).Default("").String(),
+	}
+	return &flags
 }
