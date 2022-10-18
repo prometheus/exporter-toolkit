@@ -1,0 +1,31 @@
+---
+name: CI
+on:  # yamllint disable-line rule:truthy
+  pull_request:
+  push:
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    container:
+      image: quay.io/prometheus/golang-builder:1.19-base
+    steps:
+      - uses: actions/checkout@v3
+      - uses: prometheus/promci@v0.0.2
+      - uses: ./.github/promci/actions/setup_environment
+      - run: make test
+
+  golangci:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: '<1.19'
+      - name: Lint
+        uses: golangci/golangci-lint-action@v3.2.0
+        with:
+          version: v1.49.0

@@ -1,46 +1,33 @@
 ---
+# Prometheus has switched to GitHub action.
+# Circle CI is not disabled repository-wise so that previous pull requests
+# continue working.
+# This file does not generate any CircleCI workflow.
+
 version: 2.1
 
-orbs:
-  go: circleci/go@1.7.1
+executors:
+  golang:
+    docker:
+      - image: busybox
 
 jobs:
-  test:
-    parameters:
-      go_version:
-        type: string
-      use_gomod_cache:
-        type: boolean
-        default: true
-    docker:
-    - image: cimg/go:<< parameters.go_version >>
+  noopjob:
+    executor: golang
+
     steps:
-    - checkout
-    - when:
-        condition: << parameters.use_gomod_cache >>
-        steps:
-        - go/load-cache:
-            key: v1-go<< parameters.go_version >>
-    - run: make test
-    - when:
-        condition: << parameters.use_gomod_cache >>
-        steps:
-        - go/save-cache:
-            key: v1-go<< parameters.go_version >>
-    - store_test_results:
-        path: test-results
+      - run:
+          command: "true"
 
 workflows:
   version: 2
-  tests:
+  prometheus:
     jobs:
-    # Support the last two go releases, as per https://golang.org/dl/.
-    - test:
-        name: go-1-17
-        go_version: "1.17"
-    - test:
-        name: go-1-18
-        go_version: "1.18"
-    - test:
-        name: go-1-19
-        go_version: "1.19"
+      - noopjob
+    triggers:
+      - schedule:
+          cron: "0 0 30 2 *"
+          filters:
+            branches:
+              only:
+                - main
