@@ -1,7 +1,7 @@
-tls_server_config :
-  cert_file : "server.crt"
-  key_file : "server.key"
-  client_auth_type : "VerifyClientCertIfGiven"
+tls_server_config:
+  cert_file: "server.crt"
+  key_file: "server.key"
+  client_auth_type: "VerifyClientCertIfGiven"
   cipher_suites:
   - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
   - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
@@ -20,4 +20,3 @@ tls_server_config :
   - TLS_RSA_WITH_AES_256_CBC_SHA
   - TLS_RSA_WITH_AES_128_GCM_SHA256
   - TLS_RSA_WITH_AES_256_GCM_SHA384
-
