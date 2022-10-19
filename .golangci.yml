@@ -1,6 +1,8 @@
 linters:
   enable:
-  - golint
+  - goimports
+  - misspell
+  - revive
 
 issues:
   exclude-rules:
