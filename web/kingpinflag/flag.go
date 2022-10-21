@@ -26,7 +26,7 @@ import (
 func AddFlags(a *kingpin.Application, defaultAddress string) *web.FlagConfig {
 	systemdSocket := func() *bool { b := false; return &b }() // Socket activation only available on Linux
 	if runtime.GOOS == "linux" {
-		systemdSocket = kingpin.Flag(
+		systemdSocket = a.Flag(
 			"web.systemd-socket",
 			"Use systemd socket activation listeners instead of port listeners (Linux only).",
 		).Bool()

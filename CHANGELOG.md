@@ -1,8 +1,12 @@
+## 0.8.1 / 2022-10-21
+
+* [BUGFIX] Fix systemd activation flag when using a custom kingpin app. #118
+
 ## 0.8.0 / 2022-10-10
 
-* [CHANGE] Change some structs suffix from `Struct` to `Config` #114
-* [FEATURE] Add multiple listeners and systemd socket support #95
-* [FEATURE] Allow TLS parameters to be set in code #110
+* [CHANGE] Change some structs suffix from `Struct` to `Config`. #114
+* [FEATURE] Add multiple listeners and systemd socket support. #95
+* [FEATURE] Allow TLS parameters to be set in code. #110
 
 ## 0.7.1 / 2021-12-02
 
