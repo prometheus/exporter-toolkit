@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/coreos/go-systemd/v22/activation"
 	"github.com/go-kit/log"
@@ -214,8 +215,9 @@ func ListenAndServe(server *http.Server, flags *FlagConfig, logger log.Logger) e
 		}
 		return ServeMultiple(listeners, server, flags, logger)
 	}
-	listeners := make([]net.Listener, 0, len(*flags.WebListenAddresses))
-	for _, address := range *flags.WebListenAddresses {
+	addresses := compact(*flags.WebListenAddresses)
+	listeners := make([]net.Listener, 0, len(addresses))
+	for _, address := range compact(addresses) {
 		listener, err := net.Listen("tcp", address)
 		if err != nil {
 			return err
@@ -224,6 +226,24 @@ func ListenAndServe(server *http.Server, flags *FlagConfig, logger log.Logger) e
 		listeners = append(listeners, listener)
 	}
 	return ServeMultiple(listeners, server, flags, logger)
+}
+
+// compact sorts and replaces consecutive runs of equal elements with a single copy.
+// should be replaced to golang.org/x/exp/slices when go version is bumped.
+func compact(s []string) []string {
+	if len(s) < 2 {
+		return s
+	}
+	sort.Strings(s)
+	i, last := 1, s[0]
+	for _, v := range s[1:] {
+		if v != last {
+			s[i] = v
+			i++
+			last = v
+		}
+	}
+	return s[:i]
 }
 
 // Server starts the server on the given listener. Based on the file path
