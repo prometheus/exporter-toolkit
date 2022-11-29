@@ -132,6 +132,7 @@ func TestBasicAuthWithFakepassword(t *testing.T) {
 // TestByPassBasicAuthVuln tests for CVE-2022-46146.
 func TestByPassBasicAuthVuln(t *testing.T) {
 	server := &http.Server{
+		Addr: port,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("Hello World!"))
 		}),
@@ -146,12 +147,7 @@ func TestByPassBasicAuthVuln(t *testing.T) {
 	})
 
 	go func() {
-		flags := FlagConfig{
-			WebListenAddresses: &([]string{port}),
-			WebSystemdSocket:   OfBool(false),
-			WebConfigFile:      OfString("testdata/web_config_users_noTLS.good.yml"),
-		}
-		ListenAndServe(server, &flags, testlogger)
+		ListenAndServe(server, "testdata/web_config_users_noTLS.good.yml", testlogger)
 		close(done)
 	}()
 
