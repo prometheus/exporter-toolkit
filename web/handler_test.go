@@ -137,6 +137,54 @@ func TestBasicAuthWithFakepassword(t *testing.T) {
 	login()
 }
 
+// TestByPassBasicAuthVuln tests for CVE-2022-46146.
+func TestByPassBasicAuthVuln(t *testing.T) {
+	server := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("Hello World!"))
+		}),
+	}
+
+	done := make(chan struct{})
+	t.Cleanup(func() {
+		if err := server.Shutdown(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		<-done
+	})
+
+	go func() {
+		flags := FlagConfig{
+			WebListenAddresses: &([]string{port}),
+			WebSystemdSocket:   OfBool(false),
+			WebConfigFile:      OfString("testdata/web_config_users_noTLS.good.yml"),
+		}
+		ListenAndServe(server, &flags, testlogger)
+		close(done)
+	}()
+
+	login := func(username, password string) {
+		client := &http.Client{}
+		req, err := http.NewRequest("GET", "http://localhost"+port, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.SetBasicAuth(username, password)
+		r, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.StatusCode != 401 {
+			t.Fatalf("bad return code, expected %d, got %d", 401, r.StatusCode)
+		}
+	}
+
+	// Poison the cache.
+	login("alice$2y$12$1DpfPeqF9HzHJt.EWswy1exHluGfbhnn3yXhR7Xes6m3WJqFg0Wby", "fakepassword")
+	// Login with a wrong password.
+	login("alice", "$2y$10$QOauhQNbBCuQDKes6eFzPeMqBSjb7Mr5DUmpZ/VcEd00UAV/LDeSifakepassword")
+}
+
 // TestHTTPHeaders validates that HTTP headers are added correctly.
 func TestHTTPHeaders(t *testing.T) {
 	server := &http.Server{
