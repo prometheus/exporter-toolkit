@@ -3,7 +3,7 @@ module github.com/prometheus/exporter-toolkit
 go 1.17
 
 require (
-	github.com/coreos/go-systemd/v22 v22.4.0
+	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/go-kit/log v0.2.1
 	github.com/prometheus/common v0.37.0
 	golang.org/x/crypto v0.0.0-20221012134737-56aed061732a
