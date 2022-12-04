@@ -232,3 +232,47 @@ func TestHTTPHeaders(t *testing.T) {
 		}
 	}
 }
+
+// TestBasicAuthIsNotNeededForMethodOptions validates that OPTIONS method is always allowed
+func TestBasicAuthIsNotNeededForMethodOptions(t *testing.T) {
+	server := &http.Server{
+		Addr: port,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodOptions {
+				w.Header().Set("Access-Control-Allow-Origin", "https://example.com:8080")
+				w.Header().Set("Access-Control-Expose-Headers", "Date")
+				w.Header().Set("Access-Control-Allow-Methods", "GET,OPTIONS,POST")
+				w.Header().Set("Access-Control-Allow-Headers", "Accept,Authorization,Date,Content-Type,Origin")
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+				w.WriteHeader(http.StatusNoContent)
+			}
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}),
+	}
+
+	done := make(chan struct{})
+	t.Cleanup(func() {
+		if err := server.Shutdown(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		<-done
+	})
+
+	go func() {
+		ListenAndServe(server, "testdata/web_config_users_noTLS.good.yml", testlogger)
+		close(done)
+	}()
+
+	client := &http.Client{}
+	req, err := http.NewRequest("OPTIONS", "http://localhost"+port, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.StatusCode != 204 {
+		t.Fatalf("bad return code, expected %d, got %d", 204, r.StatusCode)
+	}
+}
