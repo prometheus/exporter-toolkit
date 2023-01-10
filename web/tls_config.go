@@ -51,7 +51,7 @@ type TLSConfig struct {
 	MinVersion               TLSVersion `yaml:"min_version"`
 	MaxVersion               TLSVersion `yaml:"max_version"`
 	PreferServerCipherSuites bool       `yaml:"prefer_server_cipher_suites"`
-	ClientCertAllowedCN      string     `yaml:"client_cert_allowed_cn"`
+	ClientCertAllowedSanDns  string     `yaml:"client_cert_allowed_san_dns"`
 }
 
 type FlagConfig struct {
@@ -65,6 +65,23 @@ func (t *TLSConfig) SetDirectory(dir string) {
 	t.TLSCertPath = config_util.JoinDir(dir, t.TLSCertPath)
 	t.TLSKeyPath = config_util.JoinDir(dir, t.TLSKeyPath)
 	t.ClientCAs = config_util.JoinDir(dir, t.ClientCAs)
+}
+
+// VerifyPeerCertificate will check the DNS SAN entries of the client cert if there is configuration for
+func (t *TLSConfig) VerifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+	// sender cert comes first, see https://www.rfc-editor.org/rfc/rfc5246#section-7.4.2
+	cert, err := x509.ParseCertificate(rawCerts[0])
+	if err != nil {
+		return fmt.Errorf("error parsing client certificate: %s", err)
+	}
+
+	for _, san := range cert.DNSNames {
+		if san == t.ClientCertAllowedSanDns {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("could not find configured SAN DNS in client cert: %s", t.ClientCertAllowedSanDns)
 }
 
 type HTTPConfig struct {
@@ -164,17 +181,9 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 		cfg.ClientCAs = clientCAPool
 	}
 
-	if c.ClientCertAllowedCN != "" {
-		cfg.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-			for _, chains := range verifiedChains {
-				if len(chains) != 0 {
-					if c.ClientCertAllowedCN == chains[0].Subject.CommonName {
-						return nil
-					}
-				}
-			}
-			return errors.New("CommonName authentication failed")
-		}
+	if c.ClientCertAllowedSanDns != "" {
+		// verify that the client cert contains the allowed domain name
+		cfg.VerifyPeerCertificate = c.VerifyPeerCertificate
 	}
 
 	switch c.ClientAuth {
