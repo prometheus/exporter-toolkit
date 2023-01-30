@@ -51,7 +51,7 @@ type TLSConfig struct {
 	MinVersion               TLSVersion `yaml:"min_version"`
 	MaxVersion               TLSVersion `yaml:"max_version"`
 	PreferServerCipherSuites bool       `yaml:"prefer_server_cipher_suites"`
-	ClientCertAllowedSanDns  string     `yaml:"client_cert_allowed_san_dns"`
+	ClientCertAllowedSanDNS  string     `yaml:"client_cert_allowed_san_dns"`
 }
 
 type FlagConfig struct {
@@ -76,12 +76,12 @@ func (t *TLSConfig) VerifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]
 	}
 
 	for _, san := range cert.DNSNames {
-		if san == t.ClientCertAllowedSanDns {
+		if san == t.ClientCertAllowedSanDNS {
 			return nil
 		}
 	}
 
-	return fmt.Errorf("could not find configured SAN DNS in client cert: %s", t.ClientCertAllowedSanDns)
+	return fmt.Errorf("could not find configured SAN DNS in client cert: %s", t.ClientCertAllowedSanDNS)
 }
 
 type HTTPConfig struct {
@@ -181,7 +181,7 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 		cfg.ClientCAs = clientCAPool
 	}
 
-	if c.ClientCertAllowedSanDns != "" {
+	if c.ClientCertAllowedSanDNS != "" {
 		// verify that the client cert contains the allowed domain name
 		cfg.VerifyPeerCertificate = c.VerifyPeerCertificate
 	}
