@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 
 	"github.com/coreos/go-systemd/v22/activation"
 	"github.com/go-kit/log"
@@ -51,7 +52,8 @@ type TLSConfig struct {
 	MinVersion               TLSVersion `yaml:"min_version"`
 	MaxVersion               TLSVersion `yaml:"max_version"`
 	PreferServerCipherSuites bool       `yaml:"prefer_server_cipher_suites"`
-	ClientCertAllowedSanDNS  string     `yaml:"client_cert_allowed_san_dns"`
+	// regular expression to match the SAN DNS entries of the client cert
+	ClientCertAllowedSanDNSRegex string `yaml:"client_cert_allowed_san_dns"`
 }
 
 type FlagConfig struct {
@@ -67,7 +69,7 @@ func (t *TLSConfig) SetDirectory(dir string) {
 	t.ClientCAs = config_util.JoinDir(dir, t.ClientCAs)
 }
 
-// VerifyPeerCertificate will check the DNS SAN entries of the client cert if there is configuration for
+// VerifyPeerCertificate will check the DNS SAN entries of the client cert if there is configuration for it
 func (t *TLSConfig) VerifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 	// sender cert comes first, see https://www.rfc-editor.org/rfc/rfc5246#section-7.4.2
 	cert, err := x509.ParseCertificate(rawCerts[0])
@@ -76,12 +78,12 @@ func (t *TLSConfig) VerifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]
 	}
 
 	for _, san := range cert.DNSNames {
-		if san == t.ClientCertAllowedSanDNS {
+		if matched, _ := regexp.MatchString(t.ClientCertAllowedSanDNSRegex, san); matched {
 			return nil
 		}
 	}
 
-	return fmt.Errorf("could not find configured SAN DNS in client cert: %s", t.ClientCertAllowedSanDNS)
+	return fmt.Errorf("could not find configured SAN DNS in client cert: %s", t.ClientCertAllowedSanDNSRegex)
 }
 
 type HTTPConfig struct {
@@ -181,7 +183,7 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 		cfg.ClientCAs = clientCAPool
 	}
 
-	if c.ClientCertAllowedSanDNS != "" {
+	if c.ClientCertAllowedSanDNSRegex != "" {
 		// verify that the client cert contains the allowed domain name
 		cfg.VerifyPeerCertificate = c.VerifyPeerCertificate
 	}

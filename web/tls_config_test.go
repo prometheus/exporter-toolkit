@@ -362,6 +362,20 @@ func TestServerBehaviour(t *testing.T) {
 			ClientCertificate: "client2_selfsigned",
 			ExpectedError:     ErrorMap["Invalid client cert"],
 		},
+		{
+			Name:              `valid tls config yml and tls client with VerifyPeerCertificate (present SAN DNS entry that matches configured regex)`,
+			YAMLConfigPath:    "testdata/web_config_auth_client_san_dns_regex.good.yaml",
+			UseTLSClient:      true,
+			ClientCertificate: "client2_selfsigned",
+			ExpectedError:     nil,
+		},
+		{
+			Name:              `valid tls config yml and tls client with VerifyPeerCertificate (present SAN DNS entry that does not match configured regex)`,
+			YAMLConfigPath:    "testdata/web_config_auth_client_san_dns_regex.bad.yaml",
+			UseTLSClient:      true,
+			ClientCertificate: "client2_selfsigned",
+			ExpectedError:     ErrorMap["Invalid client cert"],
+		},
 	}
 	for _, testInputs := range testTables {
 		t.Run(testInputs.Name, testInputs.Test)

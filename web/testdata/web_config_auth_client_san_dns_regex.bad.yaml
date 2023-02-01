@@ -3,4 +3,4 @@ tls_server_config:
   key_file: "server.key"
   client_auth_type: "RequireAndVerifyClientCert"
   client_ca_file: "client2_selfsigned.pem"
-  client_cert_allowed_san_dns: "test3"
+  client_cert_allowed_san_dns: ".+test.+"
