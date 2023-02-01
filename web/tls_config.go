@@ -52,8 +52,7 @@ type TLSConfig struct {
 	MinVersion               TLSVersion `yaml:"min_version"`
 	MaxVersion               TLSVersion `yaml:"max_version"`
 	PreferServerCipherSuites bool       `yaml:"prefer_server_cipher_suites"`
-	// regular expression to match the SAN DNS entries of the client cert
-	ClientCertAllowedSanDNSRegex string `yaml:"client_cert_allowed_san_dns"`
+	ClientAllowedSanRegex    string     `yaml:"client_allowed_san_regex"`
 }
 
 type FlagConfig struct {
@@ -69,7 +68,7 @@ func (t *TLSConfig) SetDirectory(dir string) {
 	t.ClientCAs = config_util.JoinDir(dir, t.ClientCAs)
 }
 
-// VerifyPeerCertificate will check the DNS SAN entries of the client cert if there is configuration for it
+// VerifyPeerCertificate will check the SAN entries of the client cert if there is configuration for it
 func (t *TLSConfig) VerifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 	// sender cert comes first, see https://www.rfc-editor.org/rfc/rfc5246#section-7.4.2
 	cert, err := x509.ParseCertificate(rawCerts[0])
@@ -77,13 +76,26 @@ func (t *TLSConfig) VerifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]
 		return fmt.Errorf("error parsing client certificate: %s", err)
 	}
 
-	for _, san := range cert.DNSNames {
-		if matched, _ := regexp.MatchString(t.ClientCertAllowedSanDNSRegex, san); matched {
+	// Build up a slice of strings with all Subject Alternate Name values
+	sanValues := append(cert.DNSNames, cert.EmailAddresses...)
+
+	for _, ip := range cert.IPAddresses {
+		sanValues = append(sanValues, ip.String())
+	}
+
+	for _, uri := range cert.URIs {
+		sanValues = append(sanValues, uri.String())
+	}
+
+	for _, sanValue := range sanValues {
+		if matched, _ := regexp.MatchString(t.ClientAllowedSanRegex, sanValue); matched {
 			return nil
 		}
 	}
 
-	return fmt.Errorf("could not find configured SAN DNS in client cert: %s", t.ClientCertAllowedSanDNSRegex)
+	//todo: check other fields of the cert
+
+	return fmt.Errorf("could not find configured SAN in client cert: %s", t.ClientAllowedSanRegex)
 }
 
 type HTTPConfig struct {
@@ -183,7 +195,7 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 		cfg.ClientCAs = clientCAPool
 	}
 
-	if c.ClientCertAllowedSanDNSRegex != "" {
+	if c.ClientAllowedSanRegex != "" {
 		// verify that the client cert contains the allowed domain name
 		cfg.VerifyPeerCertificate = c.VerifyPeerCertificate
 	}
