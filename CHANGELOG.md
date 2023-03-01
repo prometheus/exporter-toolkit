@@ -1,7 +1,5 @@
 ## master / unreleased
 
-* [FEATURE] Add configuration for verifying the presence of an address in the Subject Alternate Name of the TLS cert provided by the client. #126
-
 ## 0.8.1 / 2022-10-21
 
 * [BUGFIX] Fix systemd activation flag when using a custom kingpin app. #118
