@@ -93,8 +93,6 @@ func (t *TLSConfig) VerifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]
 		}
 	}
 
-	//todo: check other fields of the cert
-
 	return fmt.Errorf("could not find configured SAN in client cert: %s", t.ClientAllowedSanRegex)
 }
 
