@@ -1,4 +1,4 @@
-## 0.8.2 / 2023-02-28
+## master / unreleased
 
 * [FEATURE] Add configuration for verifying the presence of an address in the Subject Alternate Name of the TLS cert provided by the client. #126
 
