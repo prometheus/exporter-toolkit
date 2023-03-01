@@ -7,7 +7,7 @@ require (
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/go-kit/log v0.2.1
 	github.com/prometheus/common v0.40.0
-	golang.org/x/crypto v0.0.0-20221012134737-56aed061732a
+	golang.org/x/crypto v0.6.0
 	golang.org/x/sync v0.1.0
 	gopkg.in/yaml.v2 v2.4.0
 )
