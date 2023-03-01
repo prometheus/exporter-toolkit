@@ -15,8 +15,7 @@ package kingpinflag
 import (
 	"runtime"
 
-	"gopkg.in/alecthomas/kingpin.v2"
-
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/prometheus/exporter-toolkit/web"
 )
 
