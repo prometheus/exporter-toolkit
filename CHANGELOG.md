@@ -1,3 +1,8 @@
+## 0.9.0 / 2023-03-06
+
+* [CHANGE] Update gopkg.in/alecthomas/kingpin.v2 to github.com/alecthomas/kingpin/v2 #133
+* [FEATURE] Exporter Landing page #51
+
 ## 0.8.1 / 2022-10-21
 
 * [BUGFIX] Fix systemd activation flag when using a custom kingpin app. #118
