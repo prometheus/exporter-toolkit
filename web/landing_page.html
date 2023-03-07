@@ -1,21 +1,24 @@
-<!doctype html>
-<html>
+<html lang="en">
   <head>
-    <meta charset="utf-8">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Name}}</title>
     <style>{{.CSS}}</style>
   </head>
   <body>
-    <nav>{{.Name}}</nav>
-    <div class="main">
-      {{if .Description}}<h3>{{.Description}}</h3>{{end}}
+    <header>
+      <h1>{{.Name}}</h1>
+    </header>
+    <main>
+      {{if .Description}}<h2>{{.Description}}</h2>{{end}}
       {{if .Version}}<div>Version: {{.Version}}</div>{{end}}
-      <div><ul>
-        {{ range .Links }}
-        <li><a href="{{ .Address }}">{{.Text}}</a>{{if .Description}}: {{.Description}}{{end}}</li>
-        {{ end }}
+      <div>
+        <ul>
+          {{ range .Links }}
+          <li><a href="{{ .Address }}">{{.Text}}</a>{{if .Description}}: {{.Description}}{{end}}</li>
+          {{ end }}
         </ul>
       </div>
-    </div>
+    </main>
   </body>
 </html>
