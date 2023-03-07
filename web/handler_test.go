@@ -15,9 +15,11 @@ package web
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"sync"
 	"testing"
+	"time"
 )
 
 // TestBasicAuthCache validates that the cache is working by calling a password
@@ -46,6 +48,8 @@ func TestBasicAuthCache(t *testing.T) {
 		ListenAndServe(server, &flags, testlogger)
 		close(done)
 	}()
+
+	waitForPort(t, port)
 
 	login := func(username, password string, code int) {
 		client := &http.Client{}
@@ -115,6 +119,8 @@ func TestBasicAuthWithFakepassword(t *testing.T) {
 		close(done)
 	}()
 
+	waitForPort(t, port)
+
 	login := func() {
 		client := &http.Client{}
 		req, err := http.NewRequest("GET", "http://localhost"+port, nil)
@@ -162,6 +168,8 @@ func TestByPassBasicAuthVuln(t *testing.T) {
 		ListenAndServe(server, &flags, testlogger)
 		close(done)
 	}()
+
+	waitForPort(t, port)
 
 	login := func(username, password string) {
 		client := &http.Client{}
@@ -211,6 +219,8 @@ func TestHTTPHeaders(t *testing.T) {
 		close(done)
 	}()
 
+	waitForPort(t, port)
+
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", "http://localhost"+port, nil)
 	if err != nil {
@@ -230,5 +240,21 @@ func TestHTTPHeaders(t *testing.T) {
 		if got := r.Header.Get(k); got != v {
 			t.Fatalf("unexpected %s header value, expected %q, got %q", k, v, got)
 		}
+	}
+}
+
+func waitForPort(t *testing.T, addr string) {
+	start := time.Now()
+	for {
+		conn, err := net.DialTimeout("tcp", addr, time.Second)
+		if err == nil {
+			conn.Close()
+			return
+		}
+		if time.Since(start) >= 5*time.Second {
+			t.Fatalf("timeout waiting for port %s: %s", addr, err)
+			return
+		}
+		time.Sleep(time.Millisecond * 100)
 	}
 }
