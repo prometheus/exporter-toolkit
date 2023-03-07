@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"sync"
 	"testing"
+	"time"
 )
 
 // TestBasicAuthCache validates that the cache is working by calling a password
@@ -46,6 +47,7 @@ func TestBasicAuthCache(t *testing.T) {
 		ListenAndServe(server, &flags, testlogger)
 		close(done)
 	}()
+	time.Sleep(250 * time.Millisecond)
 
 	login := func(username, password string, code int) {
 		client := &http.Client{}
@@ -114,6 +116,7 @@ func TestBasicAuthWithFakepassword(t *testing.T) {
 		ListenAndServe(server, &flags, testlogger)
 		close(done)
 	}()
+	time.Sleep(250 * time.Millisecond)
 
 	login := func() {
 		client := &http.Client{}
@@ -162,6 +165,7 @@ func TestByPassBasicAuthVuln(t *testing.T) {
 		ListenAndServe(server, &flags, testlogger)
 		close(done)
 	}()
+	time.Sleep(250 * time.Millisecond)
 
 	login := func(username, password string) {
 		client := &http.Client{}
@@ -210,6 +214,7 @@ func TestHTTPHeaders(t *testing.T) {
 		ListenAndServe(server, &flags, testlogger)
 		close(done)
 	}()
+	time.Sleep(250 * time.Millisecond)
 
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", "http://localhost"+port, nil)
