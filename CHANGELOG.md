@@ -1,5 +1,3 @@
-## master / unreleased
-
 ## 0.8.1 / 2022-10-21
 
 * [BUGFIX] Fix systemd activation flag when using a custom kingpin app. #118
