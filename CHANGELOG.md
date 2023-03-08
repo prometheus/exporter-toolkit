@@ -1,3 +1,9 @@
+## 0.9.1 / 2023-03-08
+
+* [BUGFIX] Landing page: Use HTML5 and Semantic HTML tags #138
+* [BUGFIX] test: use port polling to wait for server to start #139
+* [BUGFIX] Update kingpin library to fix 32-bit builds #140
+
 ## 0.9.0 / 2023-03-06
 
 * [CHANGE] Update gopkg.in/alecthomas/kingpin.v2 to github.com/alecthomas/kingpin/v2 #133
