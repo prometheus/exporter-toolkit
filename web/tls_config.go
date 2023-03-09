@@ -33,6 +33,7 @@ import (
 
 var (
 	errNoTLSConfig = errors.New("TLS config is not present")
+	ErrNoListeners = errors.New("no web listen address or systemd socket flag specified")
 )
 
 type Config struct {
@@ -203,7 +204,11 @@ func ServeMultiple(listeners []net.Listener, server *http.Server, flags *FlagCon
 // WebSystemdSocket in the FlagConfig is true. The FlagConfig is also passed on
 // to ServeMultiple.
 func ListenAndServe(server *http.Server, flags *FlagConfig, logger log.Logger) error {
-	if *flags.WebSystemdSocket {
+	if flags.WebSystemdSocket == nil && (flags.WebListenAddresses == nil || len(*flags.WebListenAddresses) == 0) {
+		return ErrNoListeners
+	}
+
+	if flags.WebSystemdSocket != nil && *flags.WebSystemdSocket {
 		level.Info(logger).Log("msg", "Listening on systemd activated listeners instead of port listeners.")
 		listeners, err := activation.Listeners()
 		if err != nil {
@@ -214,6 +219,7 @@ func ListenAndServe(server *http.Server, flags *FlagConfig, logger log.Logger) e
 		}
 		return ServeMultiple(listeners, server, flags, logger)
 	}
+
 	listeners := make([]net.Listener, 0, len(*flags.WebListenAddresses))
 	for _, address := range *flags.WebListenAddresses {
 		listener, err := net.Listen("tcp", address)
