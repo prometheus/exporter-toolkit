@@ -36,6 +36,16 @@ var (
 	ErrNoListeners = errors.New("no web listen address or systemd socket flag specified")
 )
 
+type SecretReader interface {
+	ReadSecret(path string) ([]byte, error)
+}
+
+type fileReader struct{}
+
+func (f *fileReader) ReadSecret(path string) ([]byte, error) {
+	return os.ReadFile(path)
+}
+
 type Config struct {
 	TLSConfig  TLSConfig                     `yaml:"tls_server_config"`
 	HTTPConfig HTTPConfig                    `yaml:"http_server_config"`
@@ -52,6 +62,8 @@ type TLSConfig struct {
 	MinVersion               TLSVersion `yaml:"min_version"`
 	MaxVersion               TLSVersion `yaml:"max_version"`
 	PreferServerCipherSuites bool       `yaml:"prefer_server_cipher_suites"`
+
+	Reader SecretReader `yaml:"-"`
 }
 
 type FlagConfig struct {
@@ -115,12 +127,26 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 		return nil, errors.New("missing key_file")
 	}
 
+	reader := c.Reader
+	if reader == nil {
+		reader = &fileReader{}
+	}
+
 	loadCert := func() (*tls.Certificate, error) {
-		cert, err := tls.LoadX509KeyPair(c.TLSCertPath, c.TLSKeyPath)
+		cert, err := reader.ReadSecret(c.TLSCertPath)
+		if err != nil {
+			return nil, fmt.Errorf("error loading cert: %w", err)
+		}
+		key, err := reader.ReadSecret(c.TLSKeyPath)
+		if err != nil {
+			return nil, fmt.Errorf("error loading key: %w", err)
+		}
+
+		tlsCert, err := tls.X509KeyPair(cert, key)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load X509KeyPair: %w", err)
 		}
-		return &cert, nil
+		return &tlsCert, nil
 	}
 
 	// Confirm that certificate and key paths are valid.
@@ -156,7 +182,7 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 
 	if c.ClientCAs != "" {
 		clientCAPool := x509.NewCertPool()
-		clientCAFile, err := os.ReadFile(c.ClientCAs)
+		clientCAFile, err := reader.ReadSecret(c.ClientCAs)
 		if err != nil {
 			return nil, err
 		}
