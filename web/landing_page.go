@@ -78,5 +78,6 @@ func NewLandingPage(c LandingConfig) (*LandingPageHandler, error) {
 }
 
 func (h *LandingPageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("Content-Type", "text/html; charset=UTF-8")
 	w.Write(h.landingPage)
 }
