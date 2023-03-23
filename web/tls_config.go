@@ -52,7 +52,7 @@ type TLSConfig struct {
 	MinVersion               TLSVersion `yaml:"min_version"`
 	MaxVersion               TLSVersion `yaml:"max_version"`
 	PreferServerCipherSuites bool       `yaml:"prefer_server_cipher_suites"`
-	ClientAllowedSanRegex    string     `yaml:"client_allowed_san_regex"`
+	ClientAllowedSanRegex    Regexp     `yaml:"client_allowed_san_regex"`
 }
 
 type FlagConfig struct {
@@ -69,7 +69,7 @@ func (t *TLSConfig) SetDirectory(dir string) {
 }
 
 // VerifyPeerCertificate will check the SAN entries of the client cert if there is configuration for it
-func (t *TLSConfig) VerifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+func (t *TLSConfig) VerifyPeerCertificate(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 	// sender cert comes first, see https://www.rfc-editor.org/rfc/rfc5246#section-7.4.2
 	cert, err := x509.ParseCertificate(rawCerts[0])
 	if err != nil {
@@ -88,12 +88,53 @@ func (t *TLSConfig) VerifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]
 	}
 
 	for _, sanValue := range sanValues {
-		if matched, _ := regexp.MatchString(t.ClientAllowedSanRegex, sanValue); matched {
+		if t.ClientAllowedSanRegex.MatchString(sanValue) {
 			return nil
 		}
 	}
 
 	return fmt.Errorf("could not find configured SAN in client cert: %s", t.ClientAllowedSanRegex)
+}
+
+// Regexp encapsulates a regexp.Regexp and makes it YAML marshalable.
+type Regexp struct {
+	*regexp.Regexp
+}
+
+// NewRegexp creates a new anchored Regexp and returns an error if the
+// passed-in regular expression does not compile.
+func NewRegexp(s string) (Regexp, error) {
+	regex, err := regexp.Compile("^(?:" + s + ")$")
+	return Regexp{Regexp: regex}, err
+}
+
+// UnmarshalYAML implements the yaml.Unmarshaler interface.
+func (re *Regexp) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var s string
+	if err := unmarshal(&s); err != nil {
+		return err
+	}
+	r, err := NewRegexp(s)
+	if err != nil {
+		return err
+	}
+	*re = r
+	return nil
+}
+
+// MarshalYAML implements the yaml.Marshaler interface.
+func (re Regexp) MarshalYAML() (interface{}, error) {
+	if re.String() != "" {
+		return re.String(), nil
+	}
+	return nil, nil
+}
+
+// String returns the original string used to compile the regular expression.
+func (re Regexp) String() string {
+	str := re.Regexp.String()
+	// Trim the anchor `^(?:` prefix and `)$` suffix.
+	return str[4 : len(str)-2]
 }
 
 type HTTPConfig struct {
@@ -193,7 +234,7 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 		cfg.ClientCAs = clientCAPool
 	}
 
-	if c.ClientAllowedSanRegex != "" {
+	if c.ClientAllowedSanRegex.Regexp != nil {
 		// verify that the client cert contains the allowed domain name
 		cfg.VerifyPeerCertificate = c.VerifyPeerCertificate
 	}
