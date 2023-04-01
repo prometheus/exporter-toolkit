@@ -387,6 +387,7 @@ func TestConfigReloading(t *testing.T) {
 			}
 		}()
 		flagsBadYAMLPath := FlagConfig{
+			MetricsPath:        "/metrics",
 			WebListenAddresses: &([]string{port}),
 			WebSystemdSocket:   OfBool(false),
 			WebConfigFile:      OfString(badYAMLPath),
@@ -461,6 +462,7 @@ func (test *TestInputs) Test(t *testing.T) {
 			}
 		}()
 		flags := FlagConfig{
+			MetricsPath:        "/metrics",
 			WebListenAddresses: &([]string{port}),
 			WebSystemdSocket:   OfBool(false),
 			WebConfigFile:      &test.YAMLConfigPath,

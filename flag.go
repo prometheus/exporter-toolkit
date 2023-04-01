@@ -10,7 +10,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package kingpinflag
+package toolkit
 
 import (
 	"runtime"
@@ -31,6 +31,10 @@ func AddFlags(a *kingpin.Application, defaultAddress string) *web.FlagConfig {
 		).Bool()
 	}
 	flags := web.FlagConfig{
+		MetricsPath: a.Flag(
+			"web.telemetry-path",
+			"Path under which to expose metrics.",
+		).Default("/metrics").String(),
 		WebListenAddresses: a.Flag(
 			"web.listen-address",
 			"Addresses on which to expose metrics and web interface. Repeatable for multiple addresses.",
