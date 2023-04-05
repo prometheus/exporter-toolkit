@@ -33,6 +33,8 @@ type LandingConfig struct {
 	Description string         // A short description about the exporter.
 	Form        LandingForm    // A POST form.
 	Links       []LandingLinks // Links displayed on the landing page.
+	ExtraHTML   string         // Additional HTML to be embedded.
+	ExtraCSS    string         // Additional CSS to be embedded.
 	Version     string         // The version displayed.
 }
 
