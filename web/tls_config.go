@@ -18,16 +18,17 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"net"
+	"net/http"
+	"os"
+	"path/filepath"
+
 	"github.com/coreos/go-systemd/v22/activation"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	config_util "github.com/prometheus/common/config"
 	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v2"
-	"net"
-	"net/http"
-	"os"
-	"path/filepath"
 )
 
 var (
