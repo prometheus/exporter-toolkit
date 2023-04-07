@@ -67,6 +67,7 @@ var (
 		"Bad certificate":          regexp.MustCompile(`bad certificate`),
 		"Invalid value":            regexp.MustCompile(`invalid value for`),
 		"Invalid header":           regexp.MustCompile(`HTTP header ".*" can not be configured`),
+		"Invalid client cert":      regexp.MustCompile(`bad certificate`),
 	}
 )
 
@@ -346,6 +347,20 @@ func TestServerBehaviour(t *testing.T) {
 			UseTLSClient:      true,
 			ClientCertificate: "client2_selfsigned",
 			ExpectedError:     ErrorMap["Bad certificate"],
+		},
+		{
+			Name:              `valid tls config yml and tls client with VerifyPeerCertificate (present good SAN DNS entry)`,
+			YAMLConfigPath:    "testdata/web_config_auth_client_san.good.yaml",
+			UseTLSClient:      true,
+			ClientCertificate: "client2_selfsigned",
+			ExpectedError:     nil,
+		},
+		{
+			Name:              `valid tls config yml and tls client with VerifyPeerCertificate (present invalid SAN DNS entries)`,
+			YAMLConfigPath:    "testdata/web_config_auth_client_san.bad.yaml",
+			UseTLSClient:      true,
+			ClientCertificate: "client2_selfsigned",
+			ExpectedError:     ErrorMap["Invalid client cert"],
 		},
 	}
 	for _, testInputs := range testTables {

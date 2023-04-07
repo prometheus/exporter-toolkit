@@ -52,6 +52,7 @@ type TLSConfig struct {
 	MinVersion               TLSVersion `yaml:"min_version"`
 	MaxVersion               TLSVersion `yaml:"max_version"`
 	PreferServerCipherSuites bool       `yaml:"prefer_server_cipher_suites"`
+	ClientAllowedSans        []string   `yaml:"client_allowed_sans"`
 }
 
 type FlagConfig struct {
@@ -65,6 +66,36 @@ func (t *TLSConfig) SetDirectory(dir string) {
 	t.TLSCertPath = config_util.JoinDir(dir, t.TLSCertPath)
 	t.TLSKeyPath = config_util.JoinDir(dir, t.TLSKeyPath)
 	t.ClientCAs = config_util.JoinDir(dir, t.ClientCAs)
+}
+
+// VerifyPeerCertificate will check the SAN entries of the client cert if there is configuration for it
+func (t *TLSConfig) VerifyPeerCertificate(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+	// sender cert comes first, see https://www.rfc-editor.org/rfc/rfc5246#section-7.4.2
+	cert, err := x509.ParseCertificate(rawCerts[0])
+	if err != nil {
+		return fmt.Errorf("error parsing client certificate: %s", err)
+	}
+
+	// Build up a slice of strings with all Subject Alternate Name values
+	sanValues := append(cert.DNSNames, cert.EmailAddresses...)
+
+	for _, ip := range cert.IPAddresses {
+		sanValues = append(sanValues, ip.String())
+	}
+
+	for _, uri := range cert.URIs {
+		sanValues = append(sanValues, uri.String())
+	}
+
+	for _, sanValue := range sanValues {
+		for _, allowedSan := range t.ClientAllowedSans {
+			if sanValue == allowedSan {
+				return nil
+			}
+		}
+	}
+
+	return fmt.Errorf("could not find allowed SANs in client cert, found: %v", t.ClientAllowedSans)
 }
 
 type HTTPConfig struct {
@@ -162,6 +193,11 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 		}
 		clientCAPool.AppendCertsFromPEM(clientCAFile)
 		cfg.ClientCAs = clientCAPool
+	}
+
+	if c.ClientAllowedSans != nil {
+		// verify that the client cert contains an allowed SAN
+		cfg.VerifyPeerCertificate = c.VerifyPeerCertificate
 	}
 
 	switch c.ClientAuth {
