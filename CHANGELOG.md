@@ -1,3 +1,11 @@
+## 0.10.0 / 2023-05-01
+
+* [FEATURE] Client TLS: Add option to require a specific Subject Alternate Names #126
+* [FEATURE] Add a POST form to the landing page #144
+* [FEATURE] Add generic customization to landing page #146
+* [ENHANCEMENT] Add a Content-Type header to the landing page #142
+* [BUGFIX] Fix Nil pointer references for WebSystemdSocket #127
+
 ## 0.9.1 / 2023-03-08
 
 * [BUGFIX] Landing page: Use HTML5 and Semantic HTML tags #138
