@@ -25,6 +25,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"sync"
@@ -98,6 +99,7 @@ type TestInputs struct {
 	Username            string
 	Password            string
 	ClientCertificate   string
+	URI                 string
 }
 
 func TestYAMLFiles(t *testing.T) {
@@ -504,7 +506,11 @@ func (test *TestInputs) Test(t *testing.T) {
 			client = http.DefaultClient
 			proto = "http"
 		}
-		req, err := http.NewRequest("GET", proto+"://localhost"+port, nil)
+		path, err := url.JoinPath(proto+"://localhost"+port, test.URI)
+		if err != nil {
+			t.Fatalf("Can't join url path: %v", err)
+		}
+		req, err := http.NewRequest("GET", path, nil)
 		if err != nil {
 			t.Error(err)
 		}
@@ -687,6 +693,64 @@ func TestUsers(t *testing.T) {
 			Username:       "nonexistent",
 			Password:       "nonexistent",
 			ExpectedError:  ErrorMap["Unauthorized"],
+		},
+		{
+			Name:           `with incorrect basic auth and auth_excluded_paths (path not matching)`,
+			YAMLConfigPath: "testdata/web_config_users_noTLS.authexcludedpaths.good.yml",
+			URI:            "/someotherpath",
+			Username:       "nonexistent",
+			Password:       "nonexistent",
+			ExpectedError:  ErrorMap["Unauthorized"],
+		},
+		{
+			Name:           `with correct basic auth and auth_excluded_paths (path not matching)`,
+			YAMLConfigPath: "testdata/web_config_users_noTLS.authexcludedpaths.good.yml",
+			URI:            "/someotherpath",
+			Username:       "dave",
+			Password:       "dave123",
+			ExpectedError:  nil,
+		},
+		{
+			Name:           `without basic auth and auth_excluded_paths (path matching)`,
+			YAMLConfigPath: "testdata/web_config_users_noTLS.authexcludedpaths.good.yml",
+			Username:       "",
+			Password:       "",
+			URI:            "/somepath",
+			ExpectedError:  nil,
+		},
+		{
+			Name:           `without incorrect basic auth and auth_excluded_paths (path matching)`,
+			YAMLConfigPath: "testdata/web_config_users_noTLS.authexcludedpaths.good.yml",
+			Username:       "nonexistent",
+			Password:       "nonexistent",
+			URI:            "/somepath",
+			ExpectedError:  nil,
+		},
+		{
+			Name:           `with correct basic auth and auth_excluded_paths (path matching)`,
+			YAMLConfigPath: "testdata/web_config_users_noTLS.authexcludedpaths.good.yml",
+			Username:       "dave",
+			Password:       "dave123",
+			URI:            "/somepath",
+			ExpectedError:  nil,
+		},
+		{
+			Name:           `with bad username, TLS and auth_excluded_paths (path not matching)`,
+			YAMLConfigPath: "testdata/web_config_users.authexcludedpaths.good.yml",
+			UseTLSClient:   true,
+			Username:       "nonexistent",
+			Password:       "nonexistent",
+			URI:            "/someotherpath",
+			ExpectedError:  ErrorMap["Unauthorized"],
+		},
+		{
+			Name:           `with bad username, TLS and auth_excluded_paths (path matching)`,
+			YAMLConfigPath: "testdata/web_config_users.authexcludedpaths.good.yml",
+			UseTLSClient:   true,
+			Username:       "nonexistent",
+			Password:       "nonexistent",
+			URI:            "/somepath",
+			ExpectedError:  nil,
 		},
 	}
 	for _, testInputs := range testTables {

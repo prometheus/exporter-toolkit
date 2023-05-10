@@ -30,6 +30,9 @@ import (
 	"github.com/coreos/go-systemd/v22/activation"
 	"github.com/mdlayher/vsock"
 	config_util "github.com/prometheus/common/config"
+	"github.com/prometheus/exporter-toolkit/web/internal/authentication"
+	basicauth_authentication "github.com/prometheus/exporter-toolkit/web/internal/authentication/basicauth"
+	chain_authentication "github.com/prometheus/exporter-toolkit/web/internal/authentication/chain"
 	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v2"
 )
@@ -40,9 +43,10 @@ var (
 )
 
 type Config struct {
-	TLSConfig  TLSConfig                     `yaml:"tls_server_config"`
-	HTTPConfig HTTPConfig                    `yaml:"http_server_config"`
-	Users      map[string]config_util.Secret `yaml:"basic_auth_users"`
+	TLSConfig         TLSConfig                     `yaml:"tls_server_config"`
+	HTTPConfig        HTTPConfig                    `yaml:"http_server_config"`
+	Users             map[string]config_util.Secret `yaml:"basic_auth_users"`
+	AuthExcludedPaths []string                      `yaml:"auth_excluded_paths"`
 }
 
 type TLSConfig struct {
@@ -341,6 +345,36 @@ func parseVsockPort(address string) (uint32, error) {
 	return uint32(port), nil
 }
 
+func withRequestAuthentication(handler http.Handler, webConfigPath string, logger *slog.Logger) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := getConfig(webConfigPath)
+		if err != nil {
+			logger.Error("Unable to parse configuration", "err", err.Error())
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+
+		authenticators := make([]authentication.Authenticator, 0)
+
+		if len(c.Users) > 0 {
+			basicAuthAuthenticator := basicauth_authentication.NewBasicAuthAuthenticator(c.Users)
+			authenticators = append(authenticators, basicAuthAuthenticator)
+		}
+
+		authenticator := chain_authentication.NewChainAuthenticator(authenticators)
+
+		if len(c.AuthExcludedPaths) == 0 {
+			authHandler := authentication.WithAuthentication(handler, authenticator, logger)
+			authHandler.ServeHTTP(w, r)
+			return
+		}
+
+		exceptor := authentication.NewPathExceptor(c.AuthExcludedPaths)
+		exceptorHandler := authentication.WithExceptor(handler, authenticator, exceptor, logger)
+		exceptorHandler.ServeHTTP(w, r)
+	})
+}
+
 // Server starts the server on the given listener. Based on the file path
 // WebConfigFile in the FlagConfig, TLS or basic auth could be enabled.
 func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
@@ -361,6 +395,8 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 		handler = server.Handler
 	}
 
+	authHandler := withRequestAuthentication(handler, tlsConfigPath, logger)
+
 	c, err := getConfig(tlsConfigPath)
 	if err != nil {
 		return err
@@ -369,8 +405,7 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 	server.Handler = &webHandler{
 		tlsConfigPath: tlsConfigPath,
 		logger:        logger,
-		handler:       handler,
-		cache:         newCache(),
+		handler:       authHandler,
 	}
 
 	config, err := ConfigToTLSConfig(&c.TLSConfig)
