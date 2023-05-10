@@ -366,6 +366,52 @@ func TestServerBehaviour(t *testing.T) {
 			ClientCertificate: "client2_selfsigned",
 			ExpectedError:     ErrorMap["Invalid client cert"],
 		},
+		{
+			Name:           `valid tls config yml and tls client with RequireAndVerifyClientCert and auth_excluded_paths (path not matching, certificate not present)`,
+			YAMLConfigPath: "testdata/tls_config_noAuth.requireandverifyclientcert.authexcludedpaths.good.yml",
+			UseTLSClient:   true,
+			URI:            "/someotherpath",
+			ExpectedError:  ErrorMap["Certificate required"],
+		},
+		{
+			Name:              `valid tls config yml and tls client with RequireAndVerifyClientCert and auth_excluded_paths (path not matching, certificate present)`,
+			YAMLConfigPath:    "testdata/tls_config_noAuth.requireandverifyclientcert.authexcludedpaths.good.yml",
+			UseTLSClient:      true,
+			ClientCertificate: "client_selfsigned",
+			URI:               "/someotherpath",
+			ExpectedError:     nil,
+		},
+		{
+			Name:           `valid tls config yml and tls client with RequireAndVerifyClientCert and auth_excluded_paths (path matching, certificate not present)`,
+			YAMLConfigPath: "testdata/tls_config_noAuth.requireandverifyclientcert.authexcludedpaths.good.yml",
+			UseTLSClient:   true,
+			URI:            "/somepath",
+			ExpectedError:  nil,
+		},
+		{
+			Name:              `valid tls config yml and tls client with RequireAndVerifyClientCert and auth_excluded_paths (path matching, wrong certificate present)`,
+			YAMLConfigPath:    "testdata/tls_config_noAuth.requireandverifyclientcert.authexcludedpaths.good.yml",
+			UseTLSClient:      true,
+			ClientCertificate: "client2_selfsigned",
+			URI:               "/somepath",
+			ExpectedError:     nil,
+		},
+		{
+			Name:              `valid tls config yml and tls client with VerifyPeerCertificate and auth_excluded_paths (path matching, present invalid SAN DNS entries)`,
+			YAMLConfigPath:    "testdata/web_config_auth_client_san.authexcludedpaths.bad.yaml",
+			UseTLSClient:      true,
+			ClientCertificate: "client2_selfsigned",
+			URI:               "/somepath",
+			ExpectedError:     nil,
+		},
+		{
+			Name:              `valid tls config yml and tls client with VerifyPeerCertificate and auth_excluded_paths (path not matching, present invalid SAN DNS entries)`,
+			YAMLConfigPath:    "testdata/web_config_auth_client_san.authexcludedpaths.bad.yaml",
+			UseTLSClient:      true,
+			ClientCertificate: "client2_selfsigned",
+			URI:               "/someotherpath",
+			ExpectedError:     ErrorMap["Invalid client cert"],
+		},
 	}
 	for _, testInputs := range testTables {
 		t.Run(testInputs.Name, testInputs.Test)
