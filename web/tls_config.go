@@ -43,6 +43,9 @@ type Config struct {
 }
 
 type TLSConfig struct {
+	TLSCert                  string     `yaml:"cert"`
+	TLSKey                   string     `yaml:"key"`
+	ClientCAsText            string     `yaml:"client_ca"`
 	TLSCertPath              string     `yaml:"cert_file"`
 	TLSKeyPath               string     `yaml:"key_file"`
 	ClientAuth               string     `yaml:"client_auth_type"`
@@ -132,22 +135,54 @@ func getTLSConfig(configPath string) (*tls.Config, error) {
 	return ConfigToTLSConfig(&c.TLSConfig)
 }
 
+func validateTLSPaths(c *TLSConfig) error {
+	if c.TLSCertPath == "" && c.TLSCert == "" &&
+		c.TLSKeyPath == "" && c.TLSKey == "" &&
+		c.ClientCAs == "" && c.ClientCAsText == "" &&
+		c.ClientAuth == "" {
+		return errNoTLSConfig
+	}
+
+	if c.TLSCertPath == "" && c.TLSCert == "" {
+		return errors.New("missing at most one of cert or cert_file")
+	}
+
+	if c.TLSKeyPath == "" && c.TLSKey == "" {
+		return errors.New("missing at most one of key or key_file")
+	}
+
+	return nil
+}
+
 // ConfigToTLSConfig generates the golang tls.Config from the TLSConfig struct.
 func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
-	if c.TLSCertPath == "" && c.TLSKeyPath == "" && c.ClientAuth == "" && c.ClientCAs == "" {
-		return nil, errNoTLSConfig
-	}
-
-	if c.TLSCertPath == "" {
-		return nil, errors.New("missing cert_file")
-	}
-
-	if c.TLSKeyPath == "" {
-		return nil, errors.New("missing key_file")
+	if err := validateTLSPaths(c); err != nil {
+		return nil, err
 	}
 
 	loadCert := func() (*tls.Certificate, error) {
-		cert, err := tls.LoadX509KeyPair(c.TLSCertPath, c.TLSKeyPath)
+		var certData, keyData []byte
+		var err error
+
+		if c.TLSCertPath != "" {
+			certData, err = os.ReadFile(c.TLSCertPath)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read cert_file (%s): %s", c.TLSCertPath, err)
+			}
+		} else {
+			certData = []byte(c.TLSCert)
+		}
+
+		if c.TLSKeyPath != "" {
+			keyData, err = os.ReadFile(c.TLSKeyPath)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read key_file (%s): %s", c.TLSKeyPath, err)
+			}
+		} else {
+			keyData = []byte(c.TLSKey)
+		}
+
+		cert, err := tls.X509KeyPair(certData, keyData)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load X509KeyPair: %w", err)
 		}
@@ -193,6 +228,10 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 		}
 		clientCAPool.AppendCertsFromPEM(clientCAFile)
 		cfg.ClientCAs = clientCAPool
+	} else if c.ClientCAsText != "" {
+		clientCAPool := x509.NewCertPool()
+		clientCAPool.AppendCertsFromPEM([]byte(c.ClientCAsText))
+		cfg.ClientCAs = clientCAPool
 	}
 
 	if c.ClientAllowedSans != nil {
@@ -215,7 +254,7 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 		return nil, errors.New("Invalid ClientAuth: " + c.ClientAuth)
 	}
 
-	if c.ClientCAs != "" && cfg.ClientAuth == tls.NoClientCert {
+	if (c.ClientCAs != "" || c.ClientCAsText != "") && cfg.ClientAuth == tls.NoClientCert {
 		return nil, errors.New("Client CA's have been configured without a Client Auth Policy")
 	}
 

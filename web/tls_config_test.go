@@ -51,8 +51,8 @@ var (
 		"Invalid ClientAuth":           regexp.MustCompile(`invalid ClientAuth`),
 		"TLS handshake":                regexp.MustCompile(`tls`),
 		"HTTP Request to HTTPS server": regexp.MustCompile(`HTTP`),
-		"Invalid CertPath":             regexp.MustCompile(`missing cert_file`),
-		"Invalid KeyPath":              regexp.MustCompile(`missing key_file`),
+		"Invalid Cert or CertPath":     regexp.MustCompile(`missing at most one of cert or cert_file`),
+		"Invalid Key or KeyPath":       regexp.MustCompile(`missing at most one of key or key_file`),
 		"ClientCA set without policy":  regexp.MustCompile(`Client CA's have been configured without a Client Auth Policy`),
 		"Bad password":                 regexp.MustCompile(`hashedSecret too short to be a bcrypted password`),
 		"Unauthorized":                 regexp.MustCompile(`Unauthorized`),
@@ -127,17 +127,27 @@ func TestYAMLFiles(t *testing.T) {
 		{
 			Name:           `invalid config yml (cert path empty)`,
 			YAMLConfigPath: "testdata/web_config_noAuth_certPath_empty.bad.yml",
-			ExpectedError:  ErrorMap["Invalid CertPath"],
+			ExpectedError:  ErrorMap["Invalid Cert or CertPath"],
+		},
+		{
+			Name:           `invalid config yml (cert empty)`,
+			YAMLConfigPath: "testdata/web_config_noAuth_cert_empty.bad.yml",
+			ExpectedError:  ErrorMap["Invalid Cert or CertPath"],
 		},
 		{
 			Name:           `invalid config yml (key path empty)`,
 			YAMLConfigPath: "testdata/web_config_noAuth_keyPath_empty.bad.yml",
-			ExpectedError:  ErrorMap["Invalid KeyPath"],
+			ExpectedError:  ErrorMap["Invalid Key or KeyPath"],
+		},
+		{
+			Name:           `invalid config yml (key empty)`,
+			YAMLConfigPath: "testdata/web_config_noAuth_key_empty.bad.yml",
+			ExpectedError:  ErrorMap["Invalid Key or KeyPath"],
 		},
 		{
 			Name:           `invalid config yml (cert path and key path empty)`,
 			YAMLConfigPath: "testdata/web_config_noAuth_certPath_keyPath_empty.bad.yml",
-			ExpectedError:  ErrorMap["Invalid CertPath"],
+			ExpectedError:  ErrorMap["Invalid Cert or CertPath"],
 		},
 		{
 			Name:           `invalid config yml (cert path invalid)`,
@@ -212,6 +222,12 @@ func TestServerBehaviour(t *testing.T) {
 		{
 			Name:           `valid tls config yml and tls client`,
 			YAMLConfigPath: "testdata/web_config_noAuth.good.yml",
+			UseTLSClient:   true,
+			ExpectedError:  nil,
+		},
+		{
+			Name:           `valid tls config yml (cert and key inline) and tls client`,
+			YAMLConfigPath: "testdata/web_config_noAuth_tlsInline.good.yml",
 			UseTLSClient:   true,
 			ExpectedError:  nil,
 		},
@@ -323,6 +339,13 @@ func TestServerBehaviour(t *testing.T) {
 		},
 		{
 			Name:              `valid tls config yml and tls client with RequireAnyClientCert (present certificate)`,
+			YAMLConfigPath:    "testdata/tls_config_noAuth.requireanyclientcert.good.yml",
+			UseTLSClient:      true,
+			ClientCertificate: "client_selfsigned",
+			ExpectedError:     nil,
+		},
+		{
+			Name:              `valid tls config yml (cert from file, key inline) and tls client with RequireAnyClientCert (present certificate)`,
 			YAMLConfigPath:    "testdata/tls_config_noAuth.requireanyclientcert.good.yml",
 			UseTLSClient:      true,
 			ClientCertificate: "client_selfsigned",
