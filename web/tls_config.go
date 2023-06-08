@@ -144,11 +144,11 @@ func validateTLSPaths(c *TLSConfig) error {
 	}
 
 	if c.TLSCertPath == "" && c.TLSCert == "" {
-		return errors.New("missing at most one of cert or cert_file")
+		return errors.New("missing one of cert or cert_file")
 	}
 
 	if c.TLSKeyPath == "" && c.TLSKey == "" {
-		return errors.New("missing at most one of key or key_file")
+		return errors.New("missing one of key or key_file")
 	}
 
 	return nil
