@@ -43,19 +43,19 @@ type Config struct {
 }
 
 type TLSConfig struct {
-	TLSCert                  string     `yaml:"cert"`
-	TLSKey                   string     `yaml:"key"`
-	ClientCAsText            string     `yaml:"client_ca"`
-	TLSCertPath              string     `yaml:"cert_file"`
-	TLSKeyPath               string     `yaml:"key_file"`
-	ClientAuth               string     `yaml:"client_auth_type"`
-	ClientCAs                string     `yaml:"client_ca_file"`
-	CipherSuites             []Cipher   `yaml:"cipher_suites"`
-	CurvePreferences         []Curve    `yaml:"curve_preferences"`
-	MinVersion               TLSVersion `yaml:"min_version"`
-	MaxVersion               TLSVersion `yaml:"max_version"`
-	PreferServerCipherSuites bool       `yaml:"prefer_server_cipher_suites"`
-	ClientAllowedSans        []string   `yaml:"client_allowed_sans"`
+	TLSCert                  string             `yaml:"cert"`
+	TLSKey                   config_util.Secret `yaml:"key"`
+	ClientCAsText            string             `yaml:"client_ca"`
+	TLSCertPath              string             `yaml:"cert_file"`
+	TLSKeyPath               string             `yaml:"key_file"`
+	ClientAuth               string             `yaml:"client_auth_type"`
+	ClientCAs                string             `yaml:"client_ca_file"`
+	CipherSuites             []Cipher           `yaml:"cipher_suites"`
+	CurvePreferences         []Curve            `yaml:"curve_preferences"`
+	MinVersion               TLSVersion         `yaml:"min_version"`
+	MaxVersion               TLSVersion         `yaml:"max_version"`
+	PreferServerCipherSuites bool               `yaml:"prefer_server_cipher_suites"`
+	ClientAllowedSans        []string           `yaml:"client_allowed_sans"`
 }
 
 type FlagConfig struct {
