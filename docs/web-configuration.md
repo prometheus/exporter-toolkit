@@ -26,19 +26,19 @@ tls_server_config:
   # Certificate for server to use to authenticate to client.
   # Expected to be passed as a PEM encoded sequence of bytes as a string.
   #
-  # NOTE: When passing the cert inline, cert_file should not be specified below.
-  cert: <string>
+  # NOTE: If passing the cert inline, cert_file should not be specified below.
+  [ cert: <string> ]
 
   # Key for server to use to authenticate to client.
   # Expected to be passed as a PEM encoded sequence of bytes as a string.
   #
-  # NOTE: When passing the key inline, key_file should not be specified below.
-  key: <secret>
+  # NOTE: If passing the key inline, key_file should not be specified below.
+  [ key: <secret> ]
 
   # CA certificate for client certificate authentication to the server.
   # Expected to be passed as a PEM encoded sequence of bytes as a string.
   #
-  # NOTE: When passing the client_ca inline, client_ca_file should not be specified below.
+  # NOTE: If passing the client_ca inline, client_ca_file should not be specified below.
   [ client_ca: <string> ]
 
   # Certificate and key files for server to use to authenticate to client.
