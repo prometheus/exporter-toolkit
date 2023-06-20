@@ -24,6 +24,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"sync"
@@ -64,10 +65,10 @@ var (
 		"No HTTP2 cipher":              regexp.MustCompile(`TLSConfig.CipherSuites is missing an HTTP/2-required`),
 		// The first token is returned by Go <= 1.17 and the second token is returned by Go >= 1.18.
 		"Incompatible TLS version": regexp.MustCompile(`protocol version not supported|no supported versions satisfy MinVersion and MaxVersion`),
-		"Bad certificate":          regexp.MustCompile(`bad certificate`),
+		"Bad certificate":          regexp.MustCompile(`Unauthorized`),
 		"Invalid value":            regexp.MustCompile(`invalid value for`),
 		"Invalid header":           regexp.MustCompile(`HTTP header ".*" can not be configured`),
-		"Invalid client cert":      regexp.MustCompile(`bad certificate`),
+		"Invalid client cert":      regexp.MustCompile(`Unauthorized`),
 	}
 )
 
@@ -100,6 +101,7 @@ type TestInputs struct {
 	Username            string
 	Password            string
 	ClientCertificate   string
+	URI                 string
 }
 
 func TestYAMLFiles(t *testing.T) {
@@ -362,6 +364,52 @@ func TestServerBehaviour(t *testing.T) {
 			ClientCertificate: "client2_selfsigned",
 			ExpectedError:     ErrorMap["Invalid client cert"],
 		},
+		{
+			Name:           `valid tls config yml and tls client with RequireAndVerifyClientCert and auth_excluded_paths (path not matching, certificate not present)`,
+			YAMLConfigPath: "testdata/tls_config_noAuth.requireandverifyclientcert.authexcludedpaths.good.yml",
+			UseTLSClient:   true,
+			URI:            "/someotherpath",
+			ExpectedError:  ErrorMap["Unauthorized"],
+		},
+		{
+			Name:              `valid tls config yml and tls client with RequireAndVerifyClientCert and auth_excluded_paths (path not matching, certificate present)`,
+			YAMLConfigPath:    "testdata/tls_config_noAuth.requireandverifyclientcert.authexcludedpaths.good.yml",
+			UseTLSClient:      true,
+			ClientCertificate: "client_selfsigned",
+			URI:               "/someotherpath",
+			ExpectedError:     nil,
+		},
+		{
+			Name:           `valid tls config yml and tls client with RequireAndVerifyClientCert and auth_excluded_paths (path matching, certificate not present)`,
+			YAMLConfigPath: "testdata/tls_config_noAuth.requireandverifyclientcert.authexcludedpaths.good.yml",
+			UseTLSClient:   true,
+			URI:            "/somepath",
+			ExpectedError:  nil,
+		},
+		{
+			Name:              `valid tls config yml and tls client with RequireAndVerifyClientCert and auth_excluded_paths (path matching, wrong certificate present)`,
+			YAMLConfigPath:    "testdata/tls_config_noAuth.requireandverifyclientcert.authexcludedpaths.good.yml",
+			UseTLSClient:      true,
+			ClientCertificate: "client2_selfsigned",
+			URI:               "/somepath",
+			ExpectedError:     nil,
+		},
+		{
+			Name:              `valid tls config yml and tls client with VerifyPeerCertificate and auth_excluded_paths (path matching, present invalid SAN DNS entries)`,
+			YAMLConfigPath:    "testdata/web_config_auth_client_san.authexcludedpaths.bad.yaml",
+			UseTLSClient:      true,
+			ClientCertificate: "client2_selfsigned",
+			URI:               "/somepath",
+			ExpectedError:     nil,
+		},
+		{
+			Name:              `valid tls config yml and tls client with VerifyPeerCertificate and auth_excluded_paths (path not matching, present invalid SAN DNS entries)`,
+			YAMLConfigPath:    "testdata/web_config_auth_client_san.authexcludedpaths.bad.yaml",
+			UseTLSClient:      true,
+			ClientCertificate: "client2_selfsigned",
+			URI:               "/someotherpath",
+			ExpectedError:     ErrorMap["Invalid client cert"],
+		},
 	}
 	for _, testInputs := range testTables {
 		t.Run(testInputs.Name, testInputs.Test)
@@ -502,7 +550,11 @@ func (test *TestInputs) Test(t *testing.T) {
 			client = http.DefaultClient
 			proto = "http"
 		}
-		req, err := http.NewRequest("GET", proto+"://localhost"+port, nil)
+		path, err := url.JoinPath(proto+"://localhost"+port, test.URI)
+		if err != nil {
+			t.Fatalf("Can't join url path: %v", err)
+		}
+		req, err := http.NewRequest("GET", path, nil)
 		if err != nil {
 			t.Error(err)
 		}
@@ -685,6 +737,24 @@ func TestUsers(t *testing.T) {
 			Username:       "nonexistent",
 			Password:       "nonexistent",
 			ExpectedError:  ErrorMap["Unauthorized"],
+		},
+		{
+			Name:           `with bad username, TLS and auth_excluded_paths (path not matching)`,
+			YAMLConfigPath: "testdata/web_config_users.authexcludedpaths.good.yml",
+			UseTLSClient:   true,
+			Username:       "nonexistent",
+			Password:       "nonexistent",
+			URI:            "/someotherpath",
+			ExpectedError:  ErrorMap["Unauthorized"],
+		},
+		{
+			Name:           `with bad username, TLS and auth_excluded_paths (path matching)`,
+			YAMLConfigPath: "testdata/web_config_users.authexcludedpaths.good.yml",
+			UseTLSClient:   true,
+			Username:       "nonexistent",
+			Password:       "nonexistent",
+			URI:            "/somepath",
+			ExpectedError:  nil,
 		},
 	}
 	for _, testInputs := range testTables {
