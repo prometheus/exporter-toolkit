@@ -14,10 +14,12 @@
 package web
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -28,7 +30,7 @@ import (
 	"github.com/go-kit/log/level"
 	config_util "github.com/prometheus/common/config"
 	"golang.org/x/sync/errgroup"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -119,8 +121,10 @@ func getConfig(configPath string) (*Config, error) {
 		},
 		HTTPConfig: HTTPConfig{HTTP2: true},
 	}
-	err = yaml.UnmarshalStrict(content, c)
-	if err == nil {
+	decoder := yaml.NewDecoder(bytes.NewReader(content))
+	decoder.KnownFields(true)
+	err = decoder.Decode(c)
+	if err == nil && !errors.Is(err, io.EOF) {
 		err = validateHeaderConfig(c.HTTPConfig.Header)
 	}
 	c.TLSConfig.SetDirectory(filepath.Dir(configPath))
