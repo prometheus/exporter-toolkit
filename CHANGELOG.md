@@ -1,3 +1,7 @@
+## 0.11.0 / 2023-12-08
+
+[FEATURE] Allow passing of TLS certificates inline (#158)
+
 ## 0.10.0 / 2023-05-01
 
 * [FEATURE] Client TLS: Add option to require a specific Subject Alternate Names #126
