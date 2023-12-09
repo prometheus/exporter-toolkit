@@ -1,6 +1,6 @@
 ## 0.11.0 / 2023-12-09
 
-[FEATURE] Allow passing of TLS certificates inline (#158)
+* [FEATURE] Allow passing of TLS certificates inline (#158)
 
 ## 0.10.0 / 2023-05-01
 
