@@ -34,7 +34,7 @@ func AddFlags(a *kingpin.Application, defaultAddress string) *web.FlagConfig {
 		WebListenAddresses: a.Flag(
 			"web.listen-address",
 			"Addresses on which to expose metrics and web interface. Repeatable for multiple addresses.",
-		).Default(defaultAddress).Strings(),
+		).Default(defaultAddress).HintOptions(defaultAddress).Strings(),
 		WebSystemdSocket: systemdSocket,
 		WebConfigFile: a.Flag(
 			"web.config.file",
