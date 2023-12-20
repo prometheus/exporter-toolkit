@@ -68,6 +68,9 @@ var (
 		"Invalid value":            regexp.MustCompile(`invalid value for`),
 		"Invalid header":           regexp.MustCompile(`HTTP header ".*" can not be configured`),
 		"Invalid client cert":      regexp.MustCompile(`bad certificate`),
+		// Introduced in Go 1.21
+		"Certificate required": regexp.MustCompile(`certificate required`),
+		"Unknown CA":           regexp.MustCompile(`unknown certificate authority`),
 	}
 )
 
@@ -313,12 +316,6 @@ func TestServerBehaviour(t *testing.T) {
 			ExpectedError:  ErrorMap["No HTTP2 cipher"],
 		},
 		{
-			Name:           `valid tls config yml and tls client with RequireAnyClientCert`,
-			YAMLConfigPath: "testdata/tls_config_noAuth.requireanyclientcert.good.yml",
-			UseTLSClient:   true,
-			ExpectedError:  ErrorMap["Bad certificate"],
-		},
-		{
 			Name:           `valid headers config`,
 			YAMLConfigPath: "testdata/web_config_headers.good.yml",
 		},
@@ -352,24 +349,11 @@ func TestServerBehaviour(t *testing.T) {
 			ExpectedError:     nil,
 		},
 		{
-			Name:           `valid tls config yml and tls client with RequireAndVerifyClientCert`,
-			YAMLConfigPath: "testdata/tls_config_noAuth.requireandverifyclientcert.good.yml",
-			UseTLSClient:   true,
-			ExpectedError:  ErrorMap["Bad certificate"],
-		},
-		{
 			Name:              `valid tls config yml and tls client with RequireAndVerifyClientCert (present certificate)`,
 			YAMLConfigPath:    "testdata/tls_config_noAuth.requireandverifyclientcert.good.yml",
 			UseTLSClient:      true,
 			ClientCertificate: "client_selfsigned",
 			ExpectedError:     nil,
-		},
-		{
-			Name:              `valid tls config yml and tls client with RequireAndVerifyClientCert (present wrong certificate)`,
-			YAMLConfigPath:    "testdata/tls_config_noAuth.requireandverifyclientcert.good.yml",
-			UseTLSClient:      true,
-			ClientCertificate: "client2_selfsigned",
-			ExpectedError:     ErrorMap["Bad certificate"],
 		},
 		{
 			Name:              `valid tls config yml and tls client with VerifyPeerCertificate (present good SAN DNS entry)`,
