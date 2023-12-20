@@ -1,6 +1,6 @@
 module github.com/prometheus/exporter-toolkit
 
-go 1.18
+go 1.20
 
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
