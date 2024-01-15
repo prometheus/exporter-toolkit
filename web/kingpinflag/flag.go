@@ -28,18 +28,18 @@ func AddFlags(a *kingpin.Application, defaultAddress string) *web.FlagConfig {
 		systemdSocket = a.Flag(
 			"web.systemd-socket",
 			"Use systemd socket activation listeners instead of port listeners (Linux only).",
-		).Bool()
+		).Envar("SYSTEMD_SOCKET").Bool()
 	}
 	flags := web.FlagConfig{
 		WebListenAddresses: a.Flag(
 			"web.listen-address",
 			"Addresses on which to expose metrics and web interface. Repeatable for multiple addresses.",
-		).Default(defaultAddress).HintOptions(defaultAddress).Strings(),
+		).Envar("LISTEN_ADDRESS").Default(defaultAddress).HintOptions(defaultAddress).Strings(),
 		WebSystemdSocket: systemdSocket,
 		WebConfigFile: a.Flag(
 			"web.config.file",
 			"Path to configuration file that can enable TLS or authentication. See: https://github.com/prometheus/exporter-toolkit/blob/master/docs/web-configuration.md",
-		).Default("").String(),
+		).Envar("CONFIG_FILE").Default("").String(),
 	}
 	return &flags
 }
