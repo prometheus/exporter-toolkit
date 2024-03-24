@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go_version: ["1.20", "1.21"]
+        go_version: ["1.21", "1.22"]
     container:
       image: quay.io/prometheus/golang-builder:${{ matrix.go_version }}-base
     env:

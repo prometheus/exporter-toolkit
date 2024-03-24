@@ -3,5 +3,5 @@ tls_server_config:
   key_file: "server.key"
   client_auth_type: "VerifyClientCertIfGiven"
   cipher_suites:
-    - TLS_RSA_WITH_AES_128_CBC_SHA
+    - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
   max_version: TLS12
