@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -279,7 +278,7 @@ func ServeMultiple(listeners []net.Listener, server *http.Server, flags *FlagCon
 }
 
 // ListenAndServe starts the server on addresses given in WebListenAddresses in
-// the FlagConfig. When address starts looks like vsock://:{port}, it listens on
+// the FlagConfig. When address starts looks like vsock:{port}, it listens on
 // vsock. More info check https://wiki.qemu.org/Features/VirtioVsock .
 // Or instead uses systemd socket activated listeners if WebSystemdSocket in the
 // FlagConfig is true.
@@ -303,22 +302,9 @@ func ListenAndServe(server *http.Server, flags *FlagConfig, logger log.Logger) e
 
 	listeners := make([]net.Listener, 0, len(*flags.WebListenAddresses))
 	for _, address := range *flags.WebListenAddresses {
-		var err error
-		var listener net.Listener
-		if strings.HasPrefix(address, "vsock://") {
-			port, err := parseVsockPort(address)
-			if err != nil {
-				return err
-			}
-			listener, err = vsock.Listen(port, nil)
-			if err != nil {
-				return err
-			}
-		} else {
-			listener, err = net.Listen("tcp", address)
-			if err != nil {
-				return nil
-			}
+		listener, err := parseListener(address)
+		if err != nil {
+			return err
 		}
 		defer listener.Close()
 		listeners = append(listeners, listener)
@@ -326,23 +312,35 @@ func ListenAndServe(server *http.Server, flags *FlagConfig, logger log.Logger) e
 	return ServeMultiple(listeners, server, flags, logger)
 }
 
-func parseVsockPort(address string) (uint32, error) {
-	uri, err := url.Parse(address)
-	if err != nil {
-		return 0, err
+func parseListener(address string) (net.Listener, error) {
+	if strings.HasPrefix(address, "vsock:") {
+		// listen on the vsock
+		strPort := strings.TrimPrefix(address, "vsock:")
+		if strPort == address {
+			return nil, fmt.Errorf("error trimming 'vsock:' prefix from '%s'", strPort)
+		}
+		port, err := strconv.ParseUint(strPort, 10, 32)
+		if err != nil {
+			return nil, fmt.Errorf("error converting vsock port '%s'", strPort)
+		}
+		listener, err := vsock.Listen(uint32(port), nil)
+		if err != nil {
+			return nil, err
+		}
+
+		return listener, nil
 	}
-	_, portStr, err := net.SplitHostPort(uri.Host)
+
+	// Normal, TCP listener
+	listener, err := net.Listen("tcp", address)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	port, err := strconv.ParseUint(portStr, 10, 32)
-	if err != nil {
-		return 0, err
-	}
-	return uint32(port), nil
+
+	return listener, nil
 }
 
-// Server starts the server on the given listener. Based on the file path
+// Serve starts the server on the given listener. Based on the file path
 // WebConfigFile in the FlagConfig, TLS or basic auth could be enabled.
 func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger log.Logger) error {
 	level.Info(logger).Log("msg", "Listening on", "address", l.Addr().String())
