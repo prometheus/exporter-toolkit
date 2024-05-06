@@ -40,6 +40,9 @@ type Config struct {
 	TLSConfig  TLSConfig                     `yaml:"tls_server_config"`
 	HTTPConfig HTTPConfig                    `yaml:"http_server_config"`
 	Users      map[string]config_util.Secret `yaml:"basic_auth_users"`
+	Tokens     []config_util.Secret          `yaml:"bearer_auth_tokens"`
+
+	tokenMap map[config_util.Secret]bool // Fast lookup for Bearer Tokens
 }
 
 type TLSConfig struct {
@@ -123,6 +126,14 @@ func getConfig(configPath string) (*Config, error) {
 	if err == nil {
 		err = validateHeaderConfig(c.HTTPConfig.Header)
 	}
+	// Convert tokens for fast lookup
+	if len(c.Tokens) > 0 {
+		c.tokenMap = make(map[config_util.Secret]bool, len(c.Tokens))
+		for _, t := range c.Tokens {
+			c.tokenMap[t] = true
+		}
+	}
+
 	c.TLSConfig.SetDirectory(filepath.Dir(configPath))
 	return c, err
 }
@@ -320,6 +331,9 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger log.Lo
 	if err := validateUsers(tlsConfigPath); err != nil {
 		return err
 	}
+	if err := validateTokens(tlsConfigPath); err != nil {
+		return err
+	}
 
 	// Setup basic authentication.
 	var handler http.Handler = http.DefaultServeMux
@@ -377,6 +391,9 @@ func Validate(tlsConfigPath string) error {
 		return nil
 	}
 	if err := validateUsers(tlsConfigPath); err != nil {
+		return err
+	}
+	if err := validateTokens(tlsConfigPath); err != nil {
 		return err
 	}
 	c, err := getConfig(tlsConfigPath)
