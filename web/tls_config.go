@@ -317,7 +317,7 @@ func ListenAndServe(server *http.Server, flags *FlagConfig, logger log.Logger) e
 		} else {
 			listener, err = net.Listen("tcp", address)
 			if err != nil {
-				return nil
+				return err
 			}
 		}
 		defer listener.Close()
