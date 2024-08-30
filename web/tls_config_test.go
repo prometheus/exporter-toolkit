@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -41,7 +42,7 @@ func OfString(i string) *string {
 
 var (
 	port       = getPort()
-	testlogger = &testLogger{}
+	testlogger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	ErrorMap = map[string]*regexp.Regexp{
 		"HTTP Response to HTTPS":       regexp.MustCompile(`server gave HTTP response to HTTPS client`),
@@ -73,12 +74,6 @@ var (
 		"Unknown CA":           regexp.MustCompile(`unknown certificate authority`),
 	}
 )
-
-type testLogger struct{}
-
-func (t *testLogger) Log(keyvals ...interface{}) error {
-	return nil
-}
 
 func getPort() string {
 	listener, err := net.Listen("tcp", ":0")
