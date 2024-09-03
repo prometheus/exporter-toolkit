@@ -1,6 +1,14 @@
+## 0.12.0 / 2024-09-03
+
+* [FEATURE] Add pprof links to landing page #196
+* [FEATURE] Support listen on vsock #220
+* [ENHANCEMENT] Add hints for bash completion #190
+* [ENHANCEMENT] Support kingpin.CmdClause as argument #238
+* [BUGFIX] Don't swollow listen errors #232
+
 ## 0.11.0 / 2023-12-09
 
-* [FEATURE] Allow passing of TLS certificates inline (#158)
+* [FEATURE] Allow passing of TLS certificates inline #158
 
 ## 0.10.0 / 2023-05-01
 
