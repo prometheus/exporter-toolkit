@@ -1,3 +1,7 @@
+## 0.13.0 / 2024-09-09
+
+* [CHANGE] Switch logging library to slog #240
+
 ## 0.12.0 / 2024-09-03
 
 * [FEATURE] Add pprof links to landing page #196
