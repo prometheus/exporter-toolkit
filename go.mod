@@ -6,7 +6,7 @@ require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/mdlayher/vsock v1.2.1
-	github.com/prometheus/common v0.58.0
+	github.com/prometheus/common v0.59.1
 	golang.org/x/crypto v0.26.0
 	golang.org/x/sync v0.8.0
 	gopkg.in/yaml.v2 v2.4.0
