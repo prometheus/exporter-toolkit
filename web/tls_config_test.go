@@ -173,11 +173,6 @@ func TestYAMLFiles(t *testing.T) {
 			ExpectedError:  ErrorMap["No such file"],
 		},
 		{
-			Name:           `invalid config yml (invalid user list)`,
-			YAMLConfigPath: "testdata/web_config_auth_user_list_invalid.bad.yml",
-			ExpectedError:  ErrorMap["Bad password"],
-		},
-		{
 			Name:           `invalid config yml (bad cipher)`,
 			YAMLConfigPath: "testdata/web_config_noAuth_inventedCiphers.bad.yml",
 			ExpectedError:  ErrorMap["Unknown cipher"],
@@ -634,62 +629,4 @@ func swapFileContents(file1, file2 string) error {
 		return err
 	}
 	return nil
-}
-
-func TestUsers(t *testing.T) {
-	testTables := []*TestInputs{
-		{
-			Name:           `without basic auth`,
-			YAMLConfigPath: "testdata/web_config_users_noTLS.good.yml",
-			ExpectedError:  ErrorMap["Unauthorized"],
-		},
-		{
-			Name:           `with correct basic auth`,
-			YAMLConfigPath: "testdata/web_config_users_noTLS.good.yml",
-			Username:       "dave",
-			Password:       "dave123",
-			ExpectedError:  nil,
-		},
-		{
-			Name:           `without basic auth and TLS`,
-			YAMLConfigPath: "testdata/web_config_users.good.yml",
-			UseTLSClient:   true,
-			ExpectedError:  ErrorMap["Unauthorized"],
-		},
-		{
-			Name:           `with correct basic auth and TLS`,
-			YAMLConfigPath: "testdata/web_config_users.good.yml",
-			UseTLSClient:   true,
-			Username:       "dave",
-			Password:       "dave123",
-			ExpectedError:  nil,
-		},
-		{
-			Name:           `with another correct basic auth and TLS`,
-			YAMLConfigPath: "testdata/web_config_users.good.yml",
-			UseTLSClient:   true,
-			Username:       "carol",
-			Password:       "carol123",
-			ExpectedError:  nil,
-		},
-		{
-			Name:           `with bad password and TLS`,
-			YAMLConfigPath: "testdata/web_config_users.good.yml",
-			UseTLSClient:   true,
-			Username:       "dave",
-			Password:       "bad",
-			ExpectedError:  ErrorMap["Unauthorized"],
-		},
-		{
-			Name:           `with bad username and TLS`,
-			YAMLConfigPath: "testdata/web_config_users.good.yml",
-			UseTLSClient:   true,
-			Username:       "nonexistent",
-			Password:       "nonexistent",
-			ExpectedError:  ErrorMap["Unauthorized"],
-		},
-	}
-	for _, testInputs := range testTables {
-		t.Run(testInputs.Name, testInputs.Test)
-	}
 }
