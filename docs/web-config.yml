@@ -10,3 +10,9 @@ tls_server_config:
 basic_auth_users:
   alice: $2y$10$mDwo.lAisC94iLAyP81MCesa29IzH37oigHC/42V2pdJlUprsJPze
   bob: $2y$10$hLqFl9jSjoAAy95Z/zw8Ye8wkdMBM8c5Bn1ptYqP/AXyV0.oy0S8m
+
+# Tokens that have full access to the web server via Bearer authentication.
+# Multiple tokens are accepted, to support gradual credential rollover.
+# If empty, no Bearer authentication is required.
+bearer_auth_tokens:
+  - ExampleBearerToken
