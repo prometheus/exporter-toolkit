@@ -45,6 +45,7 @@ var (
 	testlogger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	ErrorMap = map[string]*regexp.Regexp{
+		"End of file":                  regexp.MustCompile(`EOF`),
 		"HTTP Response to HTTPS":       regexp.MustCompile(`server gave HTTP response to HTTPS client`),
 		"No such file":                 regexp.MustCompile(`no such file`),
 		"Invalid argument":             regexp.MustCompile(`invalid argument`),
@@ -110,7 +111,7 @@ func TestYAMLFiles(t *testing.T) {
 		{
 			Name:           `empty config yml`,
 			YAMLConfigPath: "testdata/web_config_empty.yml",
-			ExpectedError:  nil,
+			ExpectedError:  ErrorMap["End of file"],
 		},
 		{
 			Name:           `invalid config yml (invalid structure)`,
