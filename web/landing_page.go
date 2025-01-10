@@ -61,7 +61,8 @@ type LandingLinks struct {
 }
 
 type LandingPageHandler struct {
-	landingPage []byte
+	landingPage   []byte
+	routePrefixed bool
 }
 
 var (
@@ -71,7 +72,7 @@ var (
 	landingPagecssContent string
 )
 
-func NewLandingPage(c LandingConfig) (*LandingPageHandler, error) {
+func NewLandingPage(c LandingConfig, routePrefixed bool) (*LandingPageHandler, error) {
 	var buf bytes.Buffer
 
 	length := 0
@@ -101,12 +102,13 @@ func NewLandingPage(c LandingConfig) (*LandingPageHandler, error) {
 	}
 
 	return &LandingPageHandler{
-		landingPage: buf.Bytes(),
+		landingPage:   buf.Bytes(),
+		routePrefixed: routePrefixed,
 	}, nil
 }
 
 func (h *LandingPageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
+	if !h.routePrefixed && r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
 	}
