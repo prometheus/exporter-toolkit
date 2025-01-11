@@ -64,6 +64,7 @@ type LandingLinks struct {
 
 type LandingPageHandler struct {
 	landingPage []byte
+	routePrefix string
 }
 
 var (
@@ -111,10 +112,15 @@ func NewLandingPage(c LandingConfig) (*LandingPageHandler, error) {
 
 	return &LandingPageHandler{
 		landingPage: buf.Bytes(),
+		routePrefix: c.RoutePrefix,
 	}, nil
 }
 
 func (h *LandingPageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != h.routePrefix {
+		http.NotFound(w, r)
+		return
+	}
 	w.Header().Add("Content-Type", "text/html; charset=UTF-8")
 	w.Write(h.landingPage)
 }
