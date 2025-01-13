@@ -98,6 +98,8 @@ func NewLandingPage(c LandingConfig) (*LandingPageHandler, error) {
 	}
 	if c.RoutePrefix == "" {
 		c.RoutePrefix = "/"
+	} else if !strings.HasSuffix(c.RoutePrefix, "/") {
+		c.RoutePrefix += "/"
 	}
 	// Strip leading '/' from Links if present
 	for i, link := range c.Links {
