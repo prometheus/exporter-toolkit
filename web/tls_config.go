@@ -313,6 +313,12 @@ func ListenAndServe(server *http.Server, flags *FlagConfig, logger *slog.Logger)
 			if err != nil {
 				return err
 			}
+		} else if strings.HasPrefix(address, "unix:") {
+			path := address[5:]
+			listener, err = net.Listen("unix", path)
+			if err != nil {
+				return err
+			}
 		} else {
 			listener, err = net.Listen("tcp", address)
 			if err != nil {

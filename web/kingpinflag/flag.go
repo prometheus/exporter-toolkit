@@ -39,7 +39,7 @@ func AddFlags(a flagGroup, defaultAddress string) *web.FlagConfig {
 	flags := web.FlagConfig{
 		WebListenAddresses: a.Flag(
 			"web.listen-address",
-			"Addresses on which to expose metrics and web interface. Repeatable for multiple addresses. Examples: `:9100` or `[::1]:9100` for http, `vsock://:9100` for vsock",
+			"Addresses on which to expose metrics and web interface. Repeatable for multiple addresses. Examples: `:9100` or `[::1]:9100` for http, `vsock://:9100` for vsock, `unix:/var/run/prom.sock` for unix domain sockets",
 		).Default(defaultAddress).HintOptions(defaultAddress).Strings(),
 		WebSystemdSocket: systemdSocket,
 		WebConfigFile: a.Flag(
