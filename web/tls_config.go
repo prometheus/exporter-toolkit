@@ -467,7 +467,7 @@ func (c *Curve) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	return errors.New("unknown curve: " + s)
 }
 
-func (c *Curve) MarshalYAML() (interface{}, error) {
+func (c Curve) MarshalYAML() (interface{}, error) {
 	for s, curveid := range curves {
 		if *c == curveid {
 			return s, nil
@@ -498,7 +498,7 @@ func (tv *TLSVersion) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	return errors.New("unknown TLS version: " + s)
 }
 
-func (tv *TLSVersion) MarshalYAML() (interface{}, error) {
+func (tv TLSVersion) MarshalYAML() (interface{}, error) {
 	for s, v := range tlsVersions {
 		if *tv == v {
 			return s, nil
