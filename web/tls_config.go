@@ -483,7 +483,7 @@ func (c *Curve) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 func (c Curve) MarshalYAML() (interface{}, error) {
 	for s, curveid := range curves {
-		if *c == curveid {
+		if c == curveid {
 			return s, nil
 		}
 	}
@@ -514,7 +514,7 @@ func (tv *TLSVersion) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 func (tv TLSVersion) MarshalYAML() (interface{}, error) {
 	for s, v := range tlsVersions {
-		if *tv == v {
+		if tv == v {
 			return s, nil
 		}
 	}
