@@ -27,9 +27,13 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/prometheus/common/config"
+	"gopkg.in/yaml.v2"
 )
 
 // Helpers for literal FlagConfig
@@ -691,5 +695,128 @@ func TestUsers(t *testing.T) {
 	}
 	for _, testInputs := range testTables {
 		t.Run(testInputs.Name, testInputs.Test)
+	}
+}
+
+func TestConfigGeneration(t *testing.T) {
+	// Secrets to be rendered without any masking
+	config.MarshalSecretValue = true
+
+	testTables := []struct {
+		Name     string
+		Config   Config
+		Expected string
+	}{
+		{
+			Name: "Only basic auth",
+			Config: Config{
+				Users: map[string]config.Secret{
+					"admin": config.Secret("$2y$10$X0h1gDsPszWURQaxFh.zoubFi6DXncSjhoQNJgRrnGs7EsimhC7zG"),
+				},
+			},
+			Expected: `
+basic_auth_users:
+  admin: $2y$10$X0h1gDsPszWURQaxFh.zoubFi6DXncSjhoQNJgRrnGs7EsimhC7zG`,
+		},
+		{
+			Name: "Only TLS",
+			Config: Config{
+				TLSConfig: TLSConfig{
+					TLSCertPath: "cert.pem",
+					TLSKeyPath:  "key.pem",
+					MinVersion:  TLSVersion(tls.VersionTLS12),
+					CurvePreferences: []Curve{
+						Curve(tls.CurveP256),
+						Curve(tls.CurveP521),
+					},
+					CipherSuites: []Cipher{
+						Cipher(tls.TLS_AES_128_GCM_SHA256),
+					},
+					ClientAllowedSans: []string{
+						"example.com",
+						"example.org",
+					},
+				},
+			},
+			Expected: `
+tls_server_config:
+  cert_file: cert.pem
+  key_file: key.pem
+  cipher_suites:
+  - TLS_AES_128_GCM_SHA256
+  curve_preferences:
+  - CurveP256
+  - CurveP521
+  min_version: TLS12
+  client_allowed_sans:
+  - example.com
+  - example.org`,
+		},
+		{
+			Name: "Only HTTP config",
+			Config: Config{
+				HTTPConfig: HTTPConfig{
+					HTTP2: true,
+					Header: map[string]string{
+						"X-Custom-Header": "value",
+					},
+				},
+			},
+			Expected: `
+http_server_config:
+  http2: true
+  headers:
+    X-Custom-Header: value`,
+		},
+		{
+			Name: "Basic auth and TLS",
+			Config: Config{
+				Users: map[string]config.Secret{
+					"admin": config.Secret("$2y$10$X0h1gDsPszWURQaxFh.zoubFi6DXncSjhoQNJgRrnGs7EsimhC7zG"),
+				},
+				TLSConfig: TLSConfig{
+					TLSCertPath: "cert.pem",
+					TLSKeyPath:  "key.pem",
+					MinVersion:  TLSVersion(tls.VersionTLS12),
+					CurvePreferences: []Curve{
+						Curve(tls.CurveP256),
+						Curve(tls.CurveP521),
+					},
+					CipherSuites: []Cipher{
+						Cipher(tls.TLS_AES_128_GCM_SHA256),
+					},
+					ClientAllowedSans: []string{
+						"example.com",
+						"example.org",
+					},
+				},
+			},
+			Expected: `
+tls_server_config:
+  cert_file: cert.pem
+  key_file: key.pem
+  cipher_suites:
+  - TLS_AES_128_GCM_SHA256
+  curve_preferences:
+  - CurveP256
+  - CurveP521
+  min_version: TLS12
+  client_allowed_sans:
+  - example.com
+  - example.org
+basic_auth_users:
+  admin: $2y$10$X0h1gDsPszWURQaxFh.zoubFi6DXncSjhoQNJgRrnGs7EsimhC7zG`,
+		},
+	}
+
+	for _, test := range testTables {
+		yamlConfig, err := yaml.Marshal(&test.Config)
+		if err != nil {
+			t.Error(err)
+		}
+
+		if strings.TrimSpace(test.Expected) != strings.TrimSpace(string(yamlConfig)) {
+			t.Fatalf("Expected config: %s, got config: %s", test.Expected, string(yamlConfig))
+		}
 	}
 }
