@@ -125,6 +125,12 @@ http_server_config:
 # required. Passwords are hashed with bcrypt.
 basic_auth_users:
   [ <string>: <secret> ... ]
+
+# Tokens that have full access to the web server via Bearer authentication.
+# Multiple tokens are accepted, to support gradual credential rollover.
+# If empty, no Bearer authentication is required.
+bearer_auth_tokens:
+  [- <token>]
 ```
 
 [A sample configuration file](web-config.yml) is provided.
@@ -148,6 +154,6 @@ authenticated HTTP request and then cached.
 
 ## Performance
 
-Basic authentication is meant for simple use cases, with a few users.  If you
-need to authenticate a lot of users, it is recommended to use TLS client
+Basic & Bearer authentication are meant for simple use cases, with a few users.
+If you need to authenticate a lot of users, it is recommended to use TLS client
 certificates, or to use a proper reverse proxy to handle the authentication.
