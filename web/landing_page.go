@@ -77,6 +77,8 @@ var (
 func NewLandingPage(c LandingConfig) (*LandingPageHandler, error) {
 	var buf bytes.Buffer
 
+	c.Form.Action = strings.TrimPrefix(c.Form.Action, "/")
+
 	length := 0
 	for _, input := range c.Form.Inputs {
 		inputLength := len(input.Label)
