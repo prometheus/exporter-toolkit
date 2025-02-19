@@ -95,6 +95,8 @@ var (
 func NewLandingPage(c LandingConfig) (*LandingPageHandler, string, error) {
 	var buf bytes.Buffer
 
+	c.Form.Action = strings.TrimPrefix(c.Form.Action, "/")
+
 	// Setup URL and Prefix logic
 	if c.ExternalURL == "" && c.UseSystemdSocket {
 		return nil, "", fmt.Errorf("cannot automatically infer external URL with systemd socket listener")
