@@ -1,13 +1,14 @@
 module github.com/prometheus/exporter-toolkit
 
 go 1.22
+toolchain go1.23.6
 
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/mdlayher/vsock v1.2.1
 	github.com/prometheus/common v0.62.0
-	golang.org/x/crypto v0.32.0
+	golang.org/x/crypto v0.35.0
 	golang.org/x/sync v0.11.0
 	gopkg.in/yaml.v2 v2.4.0
 )
@@ -27,7 +28,7 @@ require (
 	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
 	golang.org/x/net v0.33.0 // indirect
 	golang.org/x/oauth2 v0.24.0 // indirect
-	golang.org/x/sys v0.29.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
+	golang.org/x/sys v0.30.0 // indirect
+	golang.org/x/text v0.22.0 // indirect
 	google.golang.org/protobuf v1.36.1 // indirect
 )
