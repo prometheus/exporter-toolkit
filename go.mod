@@ -2,13 +2,15 @@ module github.com/prometheus/exporter-toolkit
 
 go 1.23.0
 
+toolchain go1.24.1
+
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/mdlayher/vsock v1.2.1
 	github.com/prometheus/common v0.62.0
 	golang.org/x/crypto v0.32.0
-	golang.org/x/sync v0.11.0
+	golang.org/x/sync v0.12.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 
