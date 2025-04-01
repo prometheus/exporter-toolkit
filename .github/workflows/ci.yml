@@ -8,8 +8,8 @@ jobs:
     strategy:
       matrix:
         go_version:
-          - "1.22"
           - "1.23"
+          - "1.24"
     container:
       image: quay.io/prometheus/golang-builder:${{ matrix.go_version }}-base
     env:
