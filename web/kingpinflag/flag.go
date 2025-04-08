@@ -36,6 +36,10 @@ func AddFlags(a flagGroup, defaultAddress string) *web.FlagConfig {
 			"Use systemd socket activation listeners instead of port listeners (Linux only).",
 		).Bool()
 	}
+	webExternalURL := a.Flag(
+		"web.external-url",
+		"The URL under which the exporter is externally reachable (for example, if served via a reverse proxy). Used for generating relative and absolute links back to the exporter itself. If the URL has a path portion, it will be used to prefix all HTTP endpoints served by the exporter. If omitted, relevant URL components will be derived automatically.",
+	).PlaceHolder("<url>").String()
 	flags := web.FlagConfig{
 		WebListenAddresses: a.Flag(
 			"web.listen-address",
@@ -46,6 +50,9 @@ func AddFlags(a flagGroup, defaultAddress string) *web.FlagConfig {
 			"web.config.file",
 			"Path to configuration file that can enable TLS or authentication. See: https://github.com/prometheus/exporter-toolkit/blob/master/docs/web-configuration.md",
 		).Default("").String(),
+		WebExternalURL: webExternalURL,
+		WebRoutePrefix: a.Flag("web.route-prefix", "Prefix for the internal routes of web endpoints. Defaults to path of --web.external-url.").Default(*webExternalURL).String(),
+		WebMetricsPath: a.Flag("web.telemetry-path", "Path under which to expose metrics.").Default("/metrics").String(),
 	}
 	return &flags
 }
