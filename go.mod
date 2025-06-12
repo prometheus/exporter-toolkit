@@ -8,7 +8,7 @@ require (
 	github.com/mdlayher/vsock v1.2.1
 	github.com/prometheus/common v0.64.0
 	golang.org/x/crypto v0.38.0
-	golang.org/x/sync v0.14.0
+	golang.org/x/sync v0.15.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 
