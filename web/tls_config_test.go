@@ -97,6 +97,8 @@ type TestInputs struct {
 	CurvePreferences    []tls.CurveID
 	Username            string
 	Password            string
+	Token               string
+	Authorization       string // Raw authorization
 	ClientCertificate   string
 }
 
@@ -511,6 +513,12 @@ func (test *TestInputs) Test(t *testing.T) {
 		if test.Username != "" {
 			req.SetBasicAuth(test.Username, test.Password)
 		}
+		if test.Token != "" {
+			req.Header.Set("Authorization", "Bearer "+test.Token)
+		}
+		if test.Authorization != "" {
+			req.Header.Set("Authorization", test.Authorization)
+		}
 		return client.Do(req)
 	}
 	go func() {
@@ -687,6 +695,96 @@ func TestUsers(t *testing.T) {
 			Username:       "nonexistent",
 			Password:       "nonexistent",
 			ExpectedError:  ErrorMap["Unauthorized"],
+		},
+	}
+	for _, testInputs := range testTables {
+		t.Run(testInputs.Name, testInputs.Test)
+	}
+}
+
+func TestTokens(t *testing.T) {
+	testTables := []*TestInputs{
+		{
+			Name:           `with correct token`,
+			YAMLConfigPath: "testdata/web_config_tokens_noTLS.good.yml",
+			Token:          "TokenTest12345",
+			ExpectedError:  nil,
+		},
+		{
+			Name:           `with incorrect token`,
+			YAMLConfigPath: "testdata/web_config_tokens_noTLS.good.yml",
+			Token:          "TokenTest12345",
+			ExpectedError:  nil,
+		},
+		{
+			Name:           `without token and TLS`,
+			YAMLConfigPath: "testdata/web_config_tokens.good.yml",
+			UseTLSClient:   true,
+			ExpectedError:  ErrorMap["Unauthorized"],
+		},
+		{
+			Name:           `with correct token and TLS`,
+			YAMLConfigPath: "testdata/web_config_tokens.good.yml",
+			UseTLSClient:   true,
+			Token:          "TokenTest12345",
+			ExpectedError:  nil,
+		},
+		{
+			Name:           `with incorrect token and TLS`,
+			YAMLConfigPath: "testdata/web_config_tokens.good.yml",
+			UseTLSClient:   true,
+			Token:          "nonexistent",
+			ExpectedError:  ErrorMap["Unauthorized"],
+		},
+	}
+	for _, testInputs := range testTables {
+		t.Run(testInputs.Name, testInputs.Test)
+	}
+}
+
+func TestRawAuthorization(t *testing.T) {
+	testTables := []*TestInputs{
+		{
+			Name:           `with raw authorization vs expected user`,
+			YAMLConfigPath: "testdata/web_config_users_noTLS.good.yml",
+			Authorization:  "FakeAuth FakeAuthMagic12345",
+			UseTLSClient:   false,
+			ExpectedError:  ErrorMap["Unauthorized"],
+		},
+		{
+			Name:           `with raw authorization and TLS vs expected user`,
+			YAMLConfigPath: "testdata/web_config_users.good.yml",
+			Authorization:  "FakeAuth FakeAuthMagic12345",
+			UseTLSClient:   true,
+			ExpectedError:  ErrorMap["Unauthorized"],
+		},
+		{
+			Name:           `with raw authorization vs expected token`,
+			YAMLConfigPath: "testdata/web_config_tokens_noTLS.good.yml",
+			Authorization:  "FakeAuth FakeAuthMagic12345",
+			UseTLSClient:   false,
+			ExpectedError:  ErrorMap["Unauthorized"],
+		},
+		{
+			Name:           `with raw authorization and TLS vs expected token`,
+			YAMLConfigPath: "testdata/web_config_tokens.good.yml",
+			Authorization:  "FakeAuth FakeAuthMagic12345",
+			UseTLSClient:   true,
+			ExpectedError:  ErrorMap["Unauthorized"],
+		},
+		{
+			Name:           `with raw authorization vs no auth expected`,
+			YAMLConfigPath: "testdata/web_config_noAuth.good.yml",
+			Authorization:  "FakeAuth FakeAuthMagic12345",
+			UseTLSClient:   true,
+			ExpectedError:  nil,
+		},
+		{
+			Name:           `with raw authorization, no TLS, vs no auth expected`,
+			YAMLConfigPath: "testdata/web_config_empty.yml",
+			Authorization:  "FakeAuth FakeAuthMagic12345",
+			UseTLSClient:   false,
+			ExpectedError:  nil,
 		},
 	}
 	for _, testInputs := range testTables {
