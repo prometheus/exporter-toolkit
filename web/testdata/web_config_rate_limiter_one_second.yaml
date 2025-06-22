@@ -1,0 +1,3 @@
+rate_limit:
+  interval: "1s"
+  burst: 0
