@@ -77,6 +77,7 @@ HeadersLoop:
 
 type webHandler struct {
 	tlsConfigPath string
+	config        *Config
 	handler       http.Handler
 	logger        *slog.Logger
 	cache         *cache
@@ -86,11 +87,18 @@ type webHandler struct {
 }
 
 func (u *webHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	c, err := getConfig(u.tlsConfigPath)
-	if err != nil {
-		u.logger.Error("Unable to parse configuration", "err", err.Error())
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
+	var c *Config
+	var err error
+
+	if u.config == nil {
+		c, err = getConfig(u.tlsConfigPath)
+		if err != nil {
+			u.logger.Error("Unable to parse configuration", "err", err.Error())
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		c = u.config
 	}
 
 	// Configure http headers.
