@@ -31,7 +31,7 @@ import (
 	"github.com/mdlayher/vsock"
 	config_util "github.com/prometheus/common/config"
 	"golang.org/x/sync/errgroup"
-	"gopkg.in/yaml.v2"
+	"sigs.k8s.io/yaml/goyaml.v2"
 )
 
 var (
@@ -122,6 +122,7 @@ func getConfig(configPath string) (*Config, error) {
 		},
 		HTTPConfig: HTTPConfig{HTTP2: true},
 	}
+
 	err = yaml.UnmarshalStrict(content, c)
 	if err == nil {
 		err = validateHeaderConfig(c.HTTPConfig.Header)
