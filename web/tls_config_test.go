@@ -54,7 +54,7 @@ var (
 		"HTTP Request to HTTPS server": regexp.MustCompile(`HTTP`),
 		"Invalid Cert or CertPath":     regexp.MustCompile(`missing one of cert or cert_file`),
 		"Invalid Key or KeyPath":       regexp.MustCompile(`missing one of key or key_file`),
-		"ClientCA set without policy":  regexp.MustCompile(`Client CA's have been configured without a Client Auth Policy`),
+		"ClientCA set without policy":  regexp.MustCompile(`client CA's have been configured without a Client Auth Policy`),
 		"Bad password":                 regexp.MustCompile(`hashedSecret too short to be a bcrypted password`),
 		"Unauthorized":                 regexp.MustCompile(`Unauthorized`),
 		"Forbidden":                    regexp.MustCompile(`Forbidden`),
