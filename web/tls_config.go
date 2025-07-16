@@ -40,25 +40,25 @@ var (
 )
 
 type Config struct {
-	TLSConfig  TLSConfig                     `yaml:"tls_server_config"`
-	HTTPConfig HTTPConfig                    `yaml:"http_server_config"`
-	Users      map[string]config_util.Secret `yaml:"basic_auth_users"`
+	TLSConfig  TLSConfig                     `yaml:"tls_server_config,omitempty"`
+	HTTPConfig HTTPConfig                    `yaml:"http_server_config,omitempty"`
+	Users      map[string]config_util.Secret `yaml:"basic_auth_users,omitempty"`
 }
 
 type TLSConfig struct {
-	TLSCert                  string             `yaml:"cert"`
-	TLSKey                   config_util.Secret `yaml:"key"`
-	ClientCAsText            string             `yaml:"client_ca"`
-	TLSCertPath              string             `yaml:"cert_file"`
-	TLSKeyPath               string             `yaml:"key_file"`
-	ClientAuth               string             `yaml:"client_auth_type"`
-	ClientCAs                string             `yaml:"client_ca_file"`
-	CipherSuites             []Cipher           `yaml:"cipher_suites"`
-	CurvePreferences         []Curve            `yaml:"curve_preferences"`
-	MinVersion               TLSVersion         `yaml:"min_version"`
-	MaxVersion               TLSVersion         `yaml:"max_version"`
-	PreferServerCipherSuites bool               `yaml:"prefer_server_cipher_suites"`
-	ClientAllowedSans        []string           `yaml:"client_allowed_sans"`
+	TLSCert                  string             `yaml:"cert,omitempty"`
+	TLSKey                   config_util.Secret `yaml:"key,omitempty"`
+	ClientCAsText            string             `yaml:"client_ca,omitempty"`
+	TLSCertPath              string             `yaml:"cert_file,omitempty"`
+	TLSKeyPath               string             `yaml:"key_file,omitempty"`
+	ClientAuth               string             `yaml:"client_auth_type,omitempty"`
+	ClientCAs                string             `yaml:"client_ca_file,omitempty"`
+	CipherSuites             []Cipher           `yaml:"cipher_suites,omitempty"`
+	CurvePreferences         []Curve            `yaml:"curve_preferences,omitempty"`
+	MinVersion               TLSVersion         `yaml:"min_version,omitempty"`
+	MaxVersion               TLSVersion         `yaml:"max_version,omitempty"`
+	PreferServerCipherSuites bool               `yaml:"prefer_server_cipher_suites,omitempty"`
+	ClientAllowedSans        []string           `yaml:"client_allowed_sans,omitempty"`
 }
 
 type FlagConfig struct {
@@ -466,9 +466,9 @@ func (c *Curve) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	return errors.New("unknown curve: " + s)
 }
 
-func (c *Curve) MarshalYAML() (interface{}, error) {
+func (c Curve) MarshalYAML() (interface{}, error) {
 	for s, curveid := range curves {
-		if *c == curveid {
+		if c == curveid {
 			return s, nil
 		}
 	}
@@ -497,9 +497,9 @@ func (tv *TLSVersion) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	return errors.New("unknown TLS version: " + s)
 }
 
-func (tv *TLSVersion) MarshalYAML() (interface{}, error) {
+func (tv TLSVersion) MarshalYAML() (interface{}, error) {
 	for s, v := range tlsVersions {
-		if *tv == v {
+		if tv == v {
 			return s, nil
 		}
 	}
