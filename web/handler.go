@@ -37,14 +37,9 @@ var extraHTTPHeaders = map[string][]string{
 	"Content-Security-Policy":   nil,
 }
 
-func validateUsers(configPath string) error {
-	c, err := getConfig(configPath)
-	if err != nil {
-		return err
-	}
-
+func validateUsers(c *Config) error {
 	for _, p := range c.Users {
-		_, err = bcrypt.Cost([]byte(p))
+		_, err := bcrypt.Cost([]byte(p))
 		if err != nil {
 			return err
 		}
@@ -99,6 +94,13 @@ func (u *webHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		c = u.config
+	}
+
+	err = ValidateWebConfig(c)
+	if err != nil {
+		u.logger.Error("Invalid web configuration", "err", err.Error())
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
 	}
 
 	// Configure http headers.
