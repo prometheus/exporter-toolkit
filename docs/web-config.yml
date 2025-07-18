@@ -10,3 +10,8 @@ tls_server_config:
 basic_auth_users:
   alice: $2y$10$mDwo.lAisC94iLAyP81MCesa29IzH37oigHC/42V2pdJlUprsJPze
   bob: $2y$10$hLqFl9jSjoAAy95Z/zw8Ye8wkdMBM8c5Bn1ptYqP/AXyV0.oy0S8m
+
+# Rate limiting requests on the endpoint using a token bucket
+rate_limit:
+  interval: "1s" # time interval between two requests, set to 0 to disable rate limiter
+  burst: 20 # and permits a burst of up to 20 requests.
