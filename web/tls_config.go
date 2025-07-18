@@ -178,6 +178,11 @@ func getTLSConfig(configPath string) (*tls.Config, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if err := validateUsers(c); err != nil {
+		return nil, err
+	}
+
 	return ConfigToTLSConfig(&c.TLSConfig)
 }
 
@@ -396,10 +401,6 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 			return server.Serve(l)
 		}
 
-		if err := validateUsers(tlsConfigPath); err != nil {
-			return err
-		}
-
 		c, err = getConfig(tlsConfigPath)
 		if err != nil {
 			return err
@@ -407,6 +408,11 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 	} else {
 		// Use the provided config.
 		c = flags.WebConfig
+	}
+
+	err = ValidateWebConfig(c)
+	if err != nil {
+		return err
 	}
 
 	// Setup basic authentication.
@@ -457,15 +463,15 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 		if flags.WebConfig == nil {
 			tlsConfigPath := *flags.WebConfigFile
 
-			if err := validateUsers(tlsConfigPath); err != nil {
-				return nil, err
-			}
-
 			tlsConfig, err = getTLSConfig(tlsConfigPath)
 			if err != nil {
 				return nil, err
 			}
 		} else {
+			err = ValidateWebConfig(flags.WebConfig)
+			if err != nil {
+				return nil, err
+			}
 			// Use the provided config.
 			tlsConfig, err = ConfigToTLSConfig(&flags.WebConfig.TLSConfig)
 			if err != nil {
@@ -483,11 +489,11 @@ func Validate(tlsConfigPath string) error {
 	if tlsConfigPath == "" {
 		return nil
 	}
-	if err := validateUsers(tlsConfigPath); err != nil {
-		return err
-	}
 	c, err := getConfig(tlsConfigPath)
 	if err != nil {
+		return err
+	}
+	if err := validateUsers(c); err != nil {
 		return err
 	}
 	_, err = ConfigToTLSConfig(&c.TLSConfig)
@@ -495,6 +501,23 @@ func Validate(tlsConfigPath string) error {
 		return nil
 	}
 	return err
+}
+
+// ValidateWebConfig validates the web configuration, including the TLS config and HTTP headers.
+func ValidateWebConfig(config *Config) error {
+	if config == nil {
+		return nil
+	}
+	if err := validateUsers(config); err != nil {
+		return err
+	}
+	if err := validateHeaderConfig(config.HTTPConfig.Header); err != nil {
+		return err
+	}
+	if _, err := ConfigToTLSConfig(&config.TLSConfig); err != nil && err != errNoTLSConfig {
+		return err
+	}
+	return nil
 }
 
 type Cipher uint16
