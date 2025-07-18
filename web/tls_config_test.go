@@ -30,6 +30,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"gopkg.in/yaml.v2"
 )
 
 // Helpers for literal FlagConfig
@@ -109,6 +111,7 @@ func TestYAMLFiles(t *testing.T) {
 			Name:           `path to config yml invalid`,
 			YAMLConfigPath: "somefile",
 			ExpectedError:  ErrorMap["No such file"],
+			WebConfig:      false,
 		},
 		{
 			Name:           `empty config yml`,
@@ -199,6 +202,9 @@ func TestYAMLFiles(t *testing.T) {
 	for _, testInputs := range testTables {
 		t.Run("run/"+testInputs.Name, testInputs.Test)
 		t.Run("validate/"+testInputs.Name, testInputs.TestValidate)
+		if testInputs.WebConfig {
+			t.Run("validateWebConfig/"+testInputs.Name, testInputs.TestValidateWebConfig)
+		}
 	}
 }
 
@@ -775,6 +781,39 @@ func (test *TestInputs) Test(t *testing.T) {
 
 func (test *TestInputs) TestValidate(t *testing.T) {
 	validationErr := Validate(test.YAMLConfigPath)
+	if test.ExpectedError == nil {
+		if validationErr != nil {
+			t.Errorf("Expected no error, got error: %v", validationErr)
+		}
+		return
+	}
+	if validationErr == nil {
+		t.Errorf("Got no error, expected: %v", test.ExpectedError)
+		return
+	}
+	if !test.ExpectedError.MatchString(validationErr.Error()) {
+		t.Errorf("Expected error %v, got error: %v", test.ExpectedError, validationErr)
+	}
+}
+
+func (test *TestInputs) TestValidateWebConfig(t *testing.T) {
+	content, err := os.ReadFile(test.YAMLConfigPath)
+	if err != nil {
+		t.Fatalf("Could not read configuration file: %v", err)
+	}
+	c := &Config{
+		TLSConfig: TLSConfig{
+			MinVersion:               tls.VersionTLS12,
+			MaxVersion:               tls.VersionTLS13,
+			PreferServerCipherSuites: true,
+		},
+		HTTPConfig: HTTPConfig{HTTP2: true},
+	}
+	err = yaml.UnmarshalStrict(content, c)
+	if err != nil {
+		t.Fatalf("Could not parse configuration: %v", err)
+	}
+	validationErr := ValidateWebConfig(c)
 	if test.ExpectedError == nil {
 		if validationErr != nil {
 			t.Errorf("Expected no error, got error: %v", validationErr)
