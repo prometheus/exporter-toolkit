@@ -24,6 +24,8 @@ import (
 	"sync"
 
 	"golang.org/x/crypto/bcrypt"
+
+	config_util "github.com/prometheus/common/config"
 )
 
 // extraHTTPHeaders is a map of HTTP headers that can be added to HTTP
@@ -49,6 +51,18 @@ func validateUsers(configPath string) error {
 			return err
 		}
 	}
+
+	return nil
+}
+
+func validateTokens(configPath string) error {
+	//c, err := getConfig(configPath)
+	//if err != nil {
+	//	return err
+	//}
+
+	//for _, p := range c.Bearer {
+	//}
 
 	return nil
 }
@@ -98,11 +112,19 @@ func (u *webHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(k, v)
 	}
 
-	if len(c.Users) == 0 {
-		u.handler.ServeHTTP(w, r)
+	if len(c.Users) > 0 {
+		u.ServeHTTPAuthBasic(w, r, c)
+		return
+	}
+	if len(c.Tokens) > 0 {
+		u.ServeHTTPAuthBearer(w, r, c)
 		return
 	}
 
+	u.handler.ServeHTTP(w, r)
+}
+
+func (u *webHandler) ServeHTTPAuthBasic(w http.ResponseWriter, r *http.Request, c *Config) {
 	user, pass, auth := r.BasicAuth()
 	if auth {
 		hashedPassword, validUser := c.Users[user]
@@ -139,5 +161,21 @@ func (u *webHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("WWW-Authenticate", "Basic")
+	http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+}
+
+func (u *webHandler) ServeHTTPAuthBearer(w http.ResponseWriter, r *http.Request, c *Config) {
+	rawHttpAuthorization := r.Header.Get("Authorization")
+	prefix := "Bearer "
+	if strings.HasPrefix(rawHttpAuthorization, prefix) {
+		token := config_util.Secret(strings.TrimPrefix(rawHttpAuthorization, prefix))
+		_, tokenExists := c.tokenMap[token]
+		if tokenExists {
+			u.handler.ServeHTTP(w, r)
+			return
+		}
+	}
+
+	w.Header().Set("WWW-Authenticate", "Bearer")
 	http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 }
