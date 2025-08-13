@@ -23,7 +23,7 @@ import (
 	"strings"
 	"sync"
 
-	"golang.org/x/crypto/bcrypt"
+	"github.com/prometheus/exporter-toolkit/web/basic_auth"
 )
 
 // extraHTTPHeaders is a map of HTTP headers that can be added to HTTP
@@ -43,14 +43,7 @@ func validateUsers(configPath string) error {
 		return err
 	}
 
-	for _, p := range c.Users {
-		_, err = bcrypt.Cost([]byte(p))
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return basic_auth.Validate(c.Users)
 }
 
 // validateHeaderConfig checks that the provided header configuration is correct.
@@ -125,7 +118,7 @@ func (u *webHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			// This user, hashedPassword, password is not cached.
 			u.bcryptMtx.Lock()
-			err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(pass))
+			err := basic_auth.CompareAndHash([]byte(hashedPassword), []byte(pass))
 			u.bcryptMtx.Unlock()
 
 			authOk = validUser && err == nil
