@@ -37,14 +37,9 @@ var extraHTTPHeaders = map[string][]string{
 	"Content-Security-Policy":   nil,
 }
 
-func validateUsers(configPath string) error {
-	c, err := getConfig(configPath)
-	if err != nil {
-		return err
-	}
-
+func validateUsers(c *Config) error {
 	for _, p := range c.Users {
-		_, err = bcrypt.Cost([]byte(p))
+		_, err := bcrypt.Cost([]byte(p))
 		if err != nil {
 			return err
 		}
@@ -77,6 +72,7 @@ HeadersLoop:
 
 type webHandler struct {
 	tlsConfigPath string
+	config        *Config
 	handler       http.Handler
 	logger        *slog.Logger
 	cache         *cache
@@ -86,9 +82,23 @@ type webHandler struct {
 }
 
 func (u *webHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	c, err := getConfig(u.tlsConfigPath)
+	var c *Config
+	var err error
+
+	if u.config == nil {
+		c, err = getConfig(u.tlsConfigPath)
+		if err != nil {
+			u.logger.Error("Unable to parse configuration", "err", err.Error())
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		c = u.config
+	}
+
+	err = ValidateWebConfig(c)
 	if err != nil {
-		u.logger.Error("Unable to parse configuration", "err", err.Error())
+		u.logger.Error("Invalid web configuration", "err", err.Error())
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
