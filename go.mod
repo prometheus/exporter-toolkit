@@ -4,7 +4,7 @@ go 1.23.0
 
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
-	github.com/coreos/go-systemd/v22 v22.5.0
+	github.com/coreos/go-systemd/v22 v22.6.0
 	github.com/mdlayher/vsock v1.2.1
 	github.com/prometheus/common v0.66.1
 	go.yaml.in/yaml/v2 v2.4.2
