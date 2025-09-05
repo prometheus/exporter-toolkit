@@ -30,8 +30,8 @@ import (
 	"github.com/coreos/go-systemd/v22/activation"
 	"github.com/mdlayher/vsock"
 	config_util "github.com/prometheus/common/config"
+	"go.yaml.in/yaml/v2"
 	"golang.org/x/sync/errgroup"
-	"gopkg.in/yaml.v2"
 )
 
 var (
