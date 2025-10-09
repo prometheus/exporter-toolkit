@@ -54,7 +54,7 @@ var (
 		"HTTP Request to HTTPS server": regexp.MustCompile(`HTTP`),
 		"Invalid Cert or CertPath":     regexp.MustCompile(`missing one of cert or cert_file`),
 		"Invalid Key or KeyPath":       regexp.MustCompile(`missing one of key or key_file`),
-		"ClientCA set without policy":  regexp.MustCompile(`Client CA's have been configured without a Client Auth Policy`),
+		"ClientCA set without policy":  regexp.MustCompile(`client CA's have been configured without a Client Auth Policy`),
 		"Bad password":                 regexp.MustCompile(`hashedSecret too short to be a bcrypted password`),
 		"Unauthorized":                 regexp.MustCompile(`Unauthorized`),
 		"Forbidden":                    regexp.MustCompile(`Forbidden`),
@@ -72,6 +72,7 @@ var (
 		// Introduced in Go 1.21
 		"Certificate required": regexp.MustCompile(`certificate required`),
 		"Unknown CA":           regexp.MustCompile(`unknown certificate authority`),
+		"Too Many Requests":    regexp.MustCompile(`Too Many Requests`),
 	}
 )
 
@@ -98,6 +99,7 @@ type TestInputs struct {
 	Username            string
 	Password            string
 	ClientCertificate   string
+	Requests            int
 }
 
 func TestYAMLFiles(t *testing.T) {
@@ -364,6 +366,20 @@ func TestServerBehaviour(t *testing.T) {
 			ClientCertificate: "client2_selfsigned",
 			ExpectedError:     ErrorMap["Invalid client cert"],
 		},
+		{
+			Name:           "valid rate limiter (no rate limiter set up) that doesn't block",
+			YAMLConfigPath: "testdata/web_config_rate_limiter_nonblocking.yaml",
+			UseTLSClient:   false,
+			Requests:       10,
+			ExpectedError:  nil,
+		},
+		{
+			Name:           "valid rate limiter with an interval of one second",
+			YAMLConfigPath: "testdata/web_config_rate_limiter_one_second.yaml",
+			UseTLSClient:   false,
+			Requests:       10,
+			ExpectedError:  ErrorMap["Too Many Requests"],
+		},
 	}
 	for _, testInputs := range testTables {
 		t.Run(testInputs.Name, testInputs.Test)
@@ -511,35 +527,41 @@ func (test *TestInputs) Test(t *testing.T) {
 		if test.Username != "" {
 			req.SetBasicAuth(test.Username, test.Password)
 		}
+
 		return client.Do(req)
 	}
 	go func() {
 		time.Sleep(250 * time.Millisecond)
-		r, err := ClientConnection()
-		if err != nil {
-			recordConnectionError(err)
-			return
-		}
 
-		if test.ActualCipher != 0 {
-			if r.TLS.CipherSuite != test.ActualCipher {
-				recordConnectionError(
-					fmt.Errorf("bad cipher suite selected. Expected: %s, got: %s",
-						tls.CipherSuiteName(test.ActualCipher),
-						tls.CipherSuiteName(r.TLS.CipherSuite),
-					),
-				)
+		for req := 0; req <= test.Requests; req++ {
+
+			r, err := ClientConnection()
+
+			if err != nil {
+				recordConnectionError(err)
+				return
 			}
-		}
 
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			recordConnectionError(err)
-			return
-		}
-		if string(body) != "Hello World!" {
-			recordConnectionError(errors.New(string(body)))
-			return
+			if test.ActualCipher != 0 {
+				if r.TLS.CipherSuite != test.ActualCipher {
+					recordConnectionError(
+						fmt.Errorf("bad cipher suite selected. Expected: %s, got: %s",
+							tls.CipherSuiteName(test.ActualCipher),
+							tls.CipherSuiteName(r.TLS.CipherSuite),
+						),
+					)
+				}
+			}
+
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				recordConnectionError(err)
+				return
+			}
+			if string(body) != "Hello World!" {
+				recordConnectionError(errors.New(string(body)))
+				return
+			}
 		}
 		recordConnectionError(nil)
 	}()

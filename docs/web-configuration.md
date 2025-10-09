@@ -20,6 +20,7 @@ Generic placeholders are defined as follows:
 * `<filename>`: a valid path in the current working directory
 * `<secret>`: a regular string that is a secret, such as a password
 * `<string>`: a regular string
+* `<int>`: a regular integer
 
 ```
 tls_server_config:
@@ -125,6 +126,12 @@ http_server_config:
 # required. Passwords are hashed with bcrypt.
 basic_auth_users:
   [ <string>: <secret> ... ]
+
+
+# Rate limiting requests on the endpoint using a token bucket
+rate_limit:
+  interval: <duration> # time interval between two requests, set to 0 to disable rate limiter
+  burst: <int> # and permits a burst of <int> requests.
 ```
 
 [A sample configuration file](web-config.yml) is provided.

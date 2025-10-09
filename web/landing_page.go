@@ -197,7 +197,15 @@ func NewLandingPage(c LandingConfig) (*LandingPageHandler, string, error) {
 		}
 		c.CSS = buf.String()
 	}
+	if c.RoutePrefix == "" {
+		c.RoutePrefix = "/"
+	} else if !strings.HasSuffix(c.RoutePrefix, "/") {
+		c.RoutePrefix += "/"
+	}
 
+	if c.Profiling == "" {
+		c.Profiling = "true"
+	}
 	// Strip leading '/' from Links if present
 	for i, link := range c.Links {
 		c.Links[i].Address = strings.TrimPrefix(link.Address, "/")

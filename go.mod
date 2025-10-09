@@ -4,12 +4,13 @@ go 1.23.0
 
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
-	github.com/coreos/go-systemd/v22 v22.5.0
+	github.com/coreos/go-systemd/v22 v22.6.0
 	github.com/mdlayher/vsock v1.2.1
-	github.com/prometheus/common v0.62.0
-	golang.org/x/crypto v0.32.0
-	golang.org/x/sync v0.11.0
-	gopkg.in/yaml.v2 v2.4.0
+	github.com/prometheus/common v0.66.1
+	go.yaml.in/yaml/v2 v2.4.2
+	golang.org/x/crypto v0.41.0
+	golang.org/x/sync v0.16.0
+	golang.org/x/time v0.12.0
 )
 
 require (
@@ -22,12 +23,12 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f // indirect
 	github.com/prometheus/client_golang v1.20.4 // indirect
-	github.com/prometheus/client_model v0.6.1 // indirect
+	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
-	golang.org/x/net v0.33.0 // indirect
-	golang.org/x/oauth2 v0.24.0 // indirect
-	golang.org/x/sys v0.29.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
-	google.golang.org/protobuf v1.36.1 // indirect
+	golang.org/x/net v0.43.0 // indirect
+	golang.org/x/oauth2 v0.30.0 // indirect
+	golang.org/x/sys v0.35.0 // indirect
+	golang.org/x/text v0.28.0 // indirect
+	google.golang.org/protobuf v1.36.8 // indirect
 )
