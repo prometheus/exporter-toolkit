@@ -1,0 +1,24 @@
+# OpenTelemetry Collector Builder Configuration
+# Minimal manifest for testing embedded Prometheus exporters
+
+dist:
+  name: otelcol-exporter-toolkit
+  description: Custom OpenTelemetry Collector with embedded Prometheus exporters
+  output_path: ./dist
+  version: 0.1.0
+  module: github.com/prometheus/exporter-toolkit/testing/ocb/otelcol-exporter-toolkit
+  # OTel Collector version to use
+  otelcol_version: 0.138.0
+
+exporters:
+  # Debug exporter for testing - prints telemetry to stdout
+  - gomod: go.opentelemetry.io/collector/exporter/debugexporter v0.138.0
+
+receivers:
+  # OTLP receiver - kept for testing and to meet minimum requirements
+  - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.138.0
+  
+  # TODO: Add custom Prometheus exporter receivers here as we develop them
+  # Example (when ready):
+  # - gomod: github.com/prometheus/exporter-toolkit/examples/dummy_exporter/otlpreceiver v0.1.0
+  # - gomod: github.com/prometheus/node_exporter/otlpreceiver v0.1.0

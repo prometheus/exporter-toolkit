@@ -1,0 +1,49 @@
+# OpenTelemetry Collector Runtime Configuration
+# Minimal config for testing embedded Prometheus exporters
+
+# Receivers collect telemetry data
+receivers:
+  # OTLP receiver - kept to meet minimum requirements
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  
+  # TODO: Add Prometheus exporter receivers here as we develop them
+  # Example (when dummy exporter is ready):
+  # prometheus/dummy:
+  #   scrape_interval: 15s
+  #   exporter_config:
+  #     # Exporter-specific configuration goes here
+  #
+  # prometheus/node_exporter:
+  #   scrape_interval: 30s
+  #   exporter_config:
+  #     collector:
+  #       disable:
+  #         - mdadm
+
+# Exporters send telemetry to backends
+exporters:
+  # Debug exporter prints to stdout - useful for testing
+  debug:
+    verbosity: detailed
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+# Service defines the telemetry pipelines
+service:
+  pipelines:
+    # Metrics pipeline - where embedded exporters will send data
+    metrics:
+      receivers: [otlp]  # TODO: Add custom exporter receivers here
+      exporters: [debug]
+
+  # Telemetry configuration for the collector itself
+  telemetry:
+    logs:
+      level: info
+      development: true
+      encoding: console

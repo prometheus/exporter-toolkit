@@ -1,0 +1,11 @@
+# Ignore build output
+dist/
+
+# Ignore logs
+*.log
+
+# Ignore temporary config files
+*-local.yaml
+*-test.yaml
+
+
