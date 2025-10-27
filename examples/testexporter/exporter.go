@@ -21,10 +21,12 @@ import (
 	"github.com/prometheus/exporter-toolkit/otlpreceiver"
 )
 
-// Exporter is a minimal test exporter that doesn't collect any real metrics.
+// Exporter is a minimal test exporter that exports a few test gauge metrics.
 type Exporter struct {
-	config   *Config
-	registry *prometheus.Registry
+	config     *Config
+	registry   *prometheus.Registry
+	testGauge1 prometheus.Gauge
+	testGauge2 prometheus.Gauge
 }
 
 // NewExporter creates a new test exporter instance.
@@ -46,7 +48,27 @@ func (e *Exporter) Initialize(ctx context.Context, cfg otlpreceiver.Config) (*pr
 
 	fmt.Printf("Test exporter initialized with name: %s\n", e.config.ExporterName)
 
-	// Return an empty registry - we'll test with hardcoded metrics
+	// Create test gauge metrics
+	e.testGauge1 = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "test_exporter_gauge_1",
+		Help: "First test gauge metric",
+	})
+
+	e.testGauge2 = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "test_exporter_gauge_2",
+		Help: "Second test gauge metric with labels",
+	}, []string{"label1", "label2"}).WithLabelValues("value1", "value2")
+
+	// Register metrics
+	e.registry.MustRegister(e.testGauge1)
+	e.registry.MustRegister(e.testGauge2.(prometheus.Collector))
+
+	// Set initial values
+	e.testGauge1.Set(42.0)
+	e.testGauge2.Set(123.45)
+
+	fmt.Printf("Test exporter registered %d gauge metrics\n", 2)
+
 	return e.registry, nil
 }
 

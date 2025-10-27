@@ -16,12 +16,10 @@ package otlpreceiver
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"go.opentelemetry.io/collector/consumer"
-	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.uber.org/zap"
 )
@@ -29,9 +27,10 @@ import (
 // scraper handles scraping metrics from a Prometheus registry and converting
 // them to OpenTelemetry format.
 type scraper struct {
-	registry *prometheus.Registry
-	consumer consumer.Metrics
-	logger   *zap.Logger
+	registry  *prometheus.Registry
+	consumer  consumer.Metrics
+	logger    *zap.Logger
+	converter *converter
 }
 
 // newScraper creates a new scraper instance.
@@ -41,9 +40,10 @@ func newScraper(
 	logger *zap.Logger,
 ) *scraper {
 	return &scraper{
-		registry: registry,
-		consumer: consumer,
-		logger:   logger,
+		registry:  registry,
+		consumer:  consumer,
+		logger:    logger,
+		converter: newConverter(),
 	}
 }
 
@@ -71,13 +71,17 @@ func (s *scraper) Scrape(ctx context.Context) (pmetric.Metrics, error) {
 }
 
 // convertMetrics converts Prometheus metric families to OpenTelemetry metrics.
-// This is a placeholder that will be fully implemented in Phase 2.
 func (s *scraper) convertMetrics(metricFamilies []*dto.MetricFamily, dest pmetric.Metrics) error {
+	if len(metricFamilies) == 0 {
+		s.logger.Debug("No metrics to convert")
+		return nil
+	}
+
 	// Create a resource metrics entry
 	rm := dest.ResourceMetrics().AppendEmpty()
 
 	// Add resource attributes
-	rm.Resource().Attributes().PutStr("service.name", "test-prometheus-exporter")
+	rm.Resource().Attributes().PutStr("service.name", "prometheus-exporter")
 	rm.Resource().Attributes().PutStr("exporter.type", "prometheus")
 
 	// Create a scope metrics entry
@@ -85,25 +89,20 @@ func (s *scraper) convertMetrics(metricFamilies []*dto.MetricFamily, dest pmetri
 	sm.Scope().SetName("prometheus_exporter")
 	sm.Scope().SetVersion("1.0.0")
 
-	// HARDCODED TEST METRIC: Add a simple gauge to verify the pipeline works
-	metric := sm.Metrics().AppendEmpty()
-	metric.SetName("test_pipeline_active")
-	metric.SetDescription("Hardcoded metric to test the receiver pipeline")
-	metric.SetUnit("1")
+	// Convert each metric family
+	for _, mf := range metricFamilies {
+		if mf == nil {
+			continue
+		}
 
-	gauge := metric.SetEmptyGauge()
-	dp := gauge.DataPoints().AppendEmpty()
-	dp.SetTimestamp(pcommon.NewTimestampFromTime(time.Now()))
-	dp.SetDoubleValue(1.0)
-	dp.Attributes().PutStr("pipeline", "working")
-
-	s.logger.Debug("Added hardcoded test metric to verify pipeline")
-
-	// TODO: Phase 2 will implement the full conversion logic here
-	// Log the actual metrics from Prometheus for debugging
-	if len(metricFamilies) > 0 {
-		s.logger.Debug("Prometheus metrics available (not yet converted)")
+		err := s.converter.convertMetricFamily(mf, sm)
+		if err != nil {
+			s.logger.Debug("Failed to convert metric family")
+			continue
+		}
 	}
+
+	s.logger.Debug("Converted Prometheus metrics to OpenTelemetry format")
 
 	return nil
 }
