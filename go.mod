@@ -7,6 +7,10 @@ require (
 	github.com/coreos/go-systemd/v22 v22.6.0
 	github.com/mdlayher/vsock v1.2.1
 	github.com/prometheus/common v0.66.1
+	go.opentelemetry.io/collector/component v1.44.0
+	go.opentelemetry.io/collector/consumer v1.44.0
+	go.opentelemetry.io/collector/pdata v1.44.0
+	go.uber.org/zap v1.27.0
 	go.yaml.in/yaml/v2 v2.4.3
 	golang.org/x/crypto v0.43.0
 	golang.org/x/sync v0.17.0
@@ -22,11 +26,8 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
-	go.opentelemetry.io/collector/component v1.44.0 // indirect
-	go.opentelemetry.io/collector/consumer v1.44.0 // indirect
 	go.opentelemetry.io/collector/featuregate v1.44.0 // indirect
 	go.opentelemetry.io/collector/internal/telemetry v0.138.0 // indirect
-	go.opentelemetry.io/collector/pdata v1.44.0 // indirect
 	go.opentelemetry.io/collector/pipeline v1.44.0 // indirect
 	go.opentelemetry.io/contrib/bridges/otelzap v0.13.0 // indirect
 	go.opentelemetry.io/otel v1.38.0 // indirect
@@ -34,7 +35,6 @@ require (
 	go.opentelemetry.io/otel/metric v1.38.0 // indirect
 	go.opentelemetry.io/otel/trace v1.38.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.27.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250804133106-a7a43d27e69b // indirect
 	google.golang.org/grpc v1.76.0 // indirect
 )
@@ -47,8 +47,8 @@ require (
 	github.com/mdlayher/socket v0.4.1 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f // indirect
-	github.com/prometheus/client_golang v1.20.4 // indirect
-	github.com/prometheus/client_model v0.6.2 // indirect
+	github.com/prometheus/client_golang v1.20.4
+	github.com/prometheus/client_model v0.6.2
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
 	go.opentelemetry.io/collector/receiver v1.44.0

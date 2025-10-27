@@ -11,19 +11,11 @@ receivers:
       http:
         endpoint: 0.0.0.0:4318
   
-  # TODO: Add Prometheus exporter receivers here as we develop them
-  # Example (when dummy exporter is ready):
-  # prometheus/dummy:
-  #   scrape_interval: 15s
-  #   exporter_config:
-  #     # Exporter-specific configuration goes here
-  #
-  # prometheus/node_exporter:
-  #   scrape_interval: 30s
-  #   exporter_config:
-  #     collector:
-  #       disable:
-  #         - mdadm
+  # Test exporter receiver - verifies the framework works
+  prometheus_testexporter:
+    scrape_interval: 10s
+    exporter_config:
+      exporter_name: "my-test-exporter"
 
 # Exporters send telemetry to backends
 exporters:
@@ -38,7 +30,7 @@ service:
   pipelines:
     # Metrics pipeline - where embedded exporters will send data
     metrics:
-      receivers: [otlp]  # TODO: Add custom exporter receivers here
+      receivers: [otlp, prometheus_testexporter]
       exporters: [debug]
 
   # Telemetry configuration for the collector itself
