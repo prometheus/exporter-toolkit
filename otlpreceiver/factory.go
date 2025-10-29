@@ -27,7 +27,7 @@ import (
 // to be embedded in the OTel Collector.
 type ExporterInitializer interface {
 	// Initialize sets up the exporter and returns a prometheus.Registry
-	// containing all the collectors.
+	// containing all the metrics collectors.
 	Initialize(ctx context.Context, exporterConfig Config) (*prometheus.Registry, error)
 
 	// Shutdown cleanly stops the exporter and releases resources.
@@ -49,6 +49,7 @@ type factoryConfig struct {
 	typeStr           component.Type
 	initializer       ExporterInitializer
 	configUnmarshaler ConfigUnmarshaler
+	defaultConfig     map[string]interface{}
 }
 
 // WithType sets the receiver type identifier.
@@ -72,6 +73,12 @@ func WithConfigUnmarshaler(unmarshaler ConfigUnmarshaler) FactoryOption {
 	}
 }
 
+func WithComponentDefaults(defaults map[string]interface{}) FactoryOption {
+	return func(cfg *factoryConfig) {
+		cfg.defaultConfig = defaults
+	}
+}
+
 // NewFactory creates a new receiver factory for a Prometheus exporter.
 // The factory uses the provided ExporterInitializer and ConfigUnmarshaler
 // to manage the exporter lifecycle and configuration.
@@ -91,9 +98,15 @@ func NewFactory(opts ...FactoryOption) receiver.Factory {
 		panic("config unmarshaler must be specified")
 	}
 
+	componentDefaultsFunc := func() component.Config {
+		config := createDefaultConfig()
+		config.ExporterConfig = cfg.defaultConfig
+		return &config
+	}
+
 	return receiver.NewFactory(
 		cfg.typeStr,
-		createDefaultConfig,
+		componentDefaultsFunc,
 		receiver.WithMetrics(
 			createMetricsReceiver(cfg.initializer, cfg.configUnmarshaler),
 			component.StabilityLevelAlpha,

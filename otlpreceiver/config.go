@@ -16,8 +16,6 @@ package otlpreceiver
 import (
 	"errors"
 	"time"
-
-	"go.opentelemetry.io/collector/component"
 )
 
 // Config is the interface that exporter-specific configurations must implement.
@@ -69,9 +67,8 @@ func (cfg *ReceiverConfig) GetExporterConfig() Config {
 }
 
 // createDefaultConfig returns a default ReceiverConfig with sensible defaults.
-func createDefaultConfig() component.Config {
-	return &ReceiverConfig{
+func createDefaultConfig() ReceiverConfig {
+	return ReceiverConfig{
 		ScrapeInterval: 30 * time.Second,
-		ExporterConfig: make(map[string]interface{}),
 	}
 }
