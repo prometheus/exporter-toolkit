@@ -6,6 +6,7 @@ require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/coreos/go-systemd/v22 v22.6.0
 	github.com/mdlayher/vsock v1.2.1
+	github.com/mitchellh/mapstructure v1.5.0
 	github.com/prometheus/common v0.66.1
 	go.opentelemetry.io/collector/component v1.44.0
 	go.opentelemetry.io/collector/consumer v1.44.0

@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/mitchellh/mapstructure"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
@@ -30,21 +31,21 @@ type ExporterInitializer interface {
 	// containing all the metrics collectors.
 	Initialize(ctx context.Context, exporterConfig Config) (*prometheus.Registry, error)
 
-	// Shutdown cleanly stops the exporter and releases resources.
+	// Shutdown is used to release resources when the receiver is shutting down.
 	Shutdown(ctx context.Context) error
 }
 
-// ConfigUnmarshaler is the interface for unmarshaling exporter-specific configuration.
+// ConfigUnmarshaler is the interface used to unmarshal the exporter-specific
+// configuration using mapstructure and struct tags.
 type ConfigUnmarshaler interface {
-	// UnmarshalExporterConfig parses the exporter-specific configuration
-	// from the raw map into a Config instance.
-	UnmarshalExporterConfig(data map[string]interface{}) (Config, error)
+	// GetConfigStruct returns a pointer to the config struct that mapstructure
+	// will populate. The struct should have appropriate mapstructure tags.
+	GetConfigStruct() Config
 }
 
 // FactoryOption is a function that configures a Factory.
 type FactoryOption func(*factoryConfig)
 
-// factoryConfig holds the configuration for creating a receiver factory.
 type factoryConfig struct {
 	typeStr           component.Type
 	initializer       ExporterInitializer
@@ -73,6 +74,7 @@ func WithConfigUnmarshaler(unmarshaler ConfigUnmarshaler) FactoryOption {
 	}
 }
 
+// WithComponentDefaults sets the default configuration for the component.
 func WithComponentDefaults(defaults map[string]interface{}) FactoryOption {
 	return func(cfg *factoryConfig) {
 		cfg.defaultConfig = defaults
@@ -114,7 +116,6 @@ func NewFactory(opts ...FactoryOption) receiver.Factory {
 	)
 }
 
-// createMetricsReceiver returns a function that creates a metrics receiver instance.
 func createMetricsReceiver(
 	initializer ExporterInitializer,
 	unmarshaler ConfigUnmarshaler,
@@ -130,21 +131,29 @@ func createMetricsReceiver(
 			return nil, fmt.Errorf("invalid config type: %T", cfg)
 		}
 
-		// Unmarshal the exporter-specific config
 		if len(receiverCfg.ExporterConfig) > 0 {
-			exporterCfg, err := unmarshaler.UnmarshalExporterConfig(receiverCfg.ExporterConfig)
+			exporterCfg := unmarshaler.GetConfigStruct()
+			decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+				Result:           exporterCfg,
+				ErrorUnused:      true,  // Reject unknown fields
+				WeaklyTypedInput: false, // Strict type checking
+				TagName:          "mapstructure",
+			})
 			if err != nil {
-				return nil, fmt.Errorf("failed to unmarshal exporter config: %w", err)
+				return nil, fmt.Errorf("failed to create decoder: %w", err)
 			}
+
+			if err = decoder.Decode(receiverCfg.ExporterConfig); err != nil {
+				return nil, fmt.Errorf("configuration validation failed: %w", err)
+			}
+
 			receiverCfg.SetExporterConfig(exporterCfg)
 		}
 
-		// Validate the complete configuration
 		if err := receiverCfg.Validate(); err != nil {
 			return nil, fmt.Errorf("invalid configuration: %w", err)
 		}
 
-		// Create the receiver instance
 		return newPrometheusReceiver(
 			receiverCfg,
 			consumer,
