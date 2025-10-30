@@ -24,12 +24,12 @@ import (
 	"go.opentelemetry.io/collector/receiver"
 )
 
-// ExporterInitializer is the interface that Prometheus exporters must implement
+// ExporterLifecycleManager is the interface that Prometheus exporters must implement
 // to be embedded in the OTel Collector.
-type ExporterInitializer interface {
-	// Initialize sets up the exporter and returns a prometheus.Registry
+type ExporterLifecycleManager interface {
+	// Start sets up the exporter and returns a prometheus.Registry
 	// containing all the metrics collectors.
-	Initialize(ctx context.Context, exporterConfig Config) (*prometheus.Registry, error)
+	Start(ctx context.Context, exporterConfig Config) (*prometheus.Registry, error)
 
 	// Shutdown is used to release resources when the receiver is shutting down.
 	Shutdown(ctx context.Context) error
@@ -48,7 +48,7 @@ type FactoryOption func(*factoryConfig)
 
 type factoryConfig struct {
 	typeStr           component.Type
-	initializer       ExporterInitializer
+	lifecycleManager  ExporterLifecycleManager
 	configUnmarshaler ConfigUnmarshaler
 	defaultConfig     map[string]interface{}
 }
@@ -61,9 +61,9 @@ func WithType(typeStr component.Type) FactoryOption {
 }
 
 // WithInitializer sets the exporter initializer.
-func WithInitializer(initializer ExporterInitializer) FactoryOption {
+func WithLifecycleManager(lifecycleManager ExporterLifecycleManager) FactoryOption {
 	return func(cfg *factoryConfig) {
-		cfg.initializer = initializer
+		cfg.lifecycleManager = lifecycleManager
 	}
 }
 
@@ -93,7 +93,7 @@ func NewFactory(opts ...FactoryOption) receiver.Factory {
 	if cfg.typeStr.String() == "" {
 		panic("receiver type must be specified")
 	}
-	if cfg.initializer == nil {
+	if cfg.lifecycleManager == nil {
 		panic("exporter initializer must be specified")
 	}
 	if cfg.configUnmarshaler == nil {
@@ -101,23 +101,23 @@ func NewFactory(opts ...FactoryOption) receiver.Factory {
 	}
 
 	componentDefaultsFunc := func() component.Config {
-		config := createDefaultConfig()
-		config.ExporterConfig = cfg.defaultConfig
-		return &config
+		receiverConfig := createDefaultConfig()
+		receiverConfig.ExporterConfig = cfg.defaultConfig
+		return &receiverConfig
 	}
 
 	return receiver.NewFactory(
 		cfg.typeStr,
 		componentDefaultsFunc,
 		receiver.WithMetrics(
-			createMetricsReceiver(cfg.initializer, cfg.configUnmarshaler),
+			createMetricsReceiver(cfg.lifecycleManager, cfg.configUnmarshaler),
 			component.StabilityLevelAlpha,
 		),
 	)
 }
 
 func createMetricsReceiver(
-	initializer ExporterInitializer,
+	lifecycleManager ExporterLifecycleManager,
 	unmarshaler ConfigUnmarshaler,
 ) receiver.CreateMetricsFunc {
 	return func(
@@ -158,7 +158,7 @@ func createMetricsReceiver(
 			receiverCfg,
 			consumer,
 			set,
-			initializer,
+			lifecycleManager,
 		), nil
 	}
 }

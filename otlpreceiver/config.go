@@ -66,7 +66,6 @@ func (cfg *ReceiverConfig) GetExporterConfig() Config {
 	return cfg.exporterConfigInstance
 }
 
-// createDefaultConfig returns a default ReceiverConfig with sensible defaults.
 func createDefaultConfig() ReceiverConfig {
 	return ReceiverConfig{
 		ScrapeInterval: 30 * time.Second,

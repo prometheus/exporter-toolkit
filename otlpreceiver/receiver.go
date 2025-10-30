@@ -26,11 +26,11 @@ import (
 
 // prometheusReceiver implements the receiver.Metrics interface for Prometheus exporters.
 type prometheusReceiver struct {
-	config      *ReceiverConfig
-	consumer    consumer.Metrics
-	settings    receiver.Settings
-	initializer ExporterInitializer
-	scraper     *scraper
+	config           *ReceiverConfig
+	consumer         consumer.Metrics
+	settings         receiver.Settings
+	lifecycleManager ExporterLifecycleManager
+	scraper          *scraper
 
 	registry *prometheus.Registry
 	cancel   context.CancelFunc
@@ -42,14 +42,14 @@ func newPrometheusReceiver(
 	config *ReceiverConfig,
 	consumer consumer.Metrics,
 	settings receiver.Settings,
-	initializer ExporterInitializer,
+	lifecycleManager ExporterLifecycleManager,
 ) *prometheusReceiver {
 	return &prometheusReceiver{
-		config:      config,
-		consumer:    consumer,
-		settings:    settings,
-		initializer: initializer,
-		done:        make(chan struct{}),
+		config:           config,
+		consumer:         consumer,
+		settings:         settings,
+		lifecycleManager: lifecycleManager,
+		done:             make(chan struct{}),
 	}
 }
 
@@ -58,11 +58,11 @@ func newPrometheusReceiver(
 func (r *prometheusReceiver) Start(ctx context.Context, host component.Host) error {
 	r.settings.Logger.Info("Starting Prometheus exporter receiver")
 
-	// Initialize the exporter
+	// Start the exporter
 	exporterConfig := r.config.GetExporterConfig()
-	registry, err := r.initializer.Initialize(ctx, exporterConfig)
+	registry, err := r.lifecycleManager.Start(ctx, exporterConfig)
 	if err != nil {
-		return fmt.Errorf("failed to initialize exporter: %w", err)
+		return fmt.Errorf("failed to start exporter: %w", err)
 	}
 	r.registry = registry
 
@@ -101,8 +101,8 @@ func (r *prometheusReceiver) Shutdown(ctx context.Context) error {
 	}
 
 	// Shutdown the exporter
-	if r.initializer != nil {
-		if err := r.initializer.Shutdown(ctx); err != nil {
+	if r.lifecycleManager != nil {
+		if err := r.lifecycleManager.Shutdown(ctx); err != nil {
 			r.settings.Logger.Error("Failed to shutdown exporter")
 			return fmt.Errorf("failed to shutdown exporter: %w", err)
 		}

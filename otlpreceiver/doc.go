@@ -22,7 +22,7 @@
 // The otlpreceiver package provides the core infrastructure for converting
 // Prometheus exporters into OTel receivers:
 //
-//  1. Config system for exporter-specific configuration
+//  1. Config system for exporter-specific configuration with automatic validation
 //  2. Factory pattern for creating receiver instances
 //  3. Lifecycle management (Start/Shutdown)
 //  4. Periodic metric scraping from Prometheus registries
@@ -32,26 +32,32 @@
 //
 // To integrate a Prometheus exporter, implement two interfaces:
 //
-// ExporterInitializer: Manages the exporter lifecycle
+// ExporterLifecycleManager: Manages the exporter lifecycle
 //
-//	type MyExporterInitializer struct {
+//	type MyExporterLifecycleManager struct {
 //	    // exporter state
 //	}
 //
-//	func (i *MyExporterInitializer) Initialize(ctx context.Context, cfg Config) (*prometheus.Registry, error) {
-//	    // Initialize your exporter and return its registry
+//	func (i *MyExporterLifecycleManager) Start(ctx context.Context, cfg Config) (*prometheus.Registry, error) {
+//	    // Start your exporter and return its registry
 //	}
 //
-//	func (i *MyExporterInitializer) Shutdown(ctx context.Context) error {
+//	func (i *MyExporterLifecycleManager) Shutdown(ctx context.Context) error {
 //	    // Clean up resources
 //	}
 //
-// ConfigUnmarshaler: Handles exporter-specific configuration
+// ConfigUnmarshaler: Handles exporter-specific configuration using mapstructure
+//
+//	type MyConfig struct {
+//	    EnableFeature bool     `mapstructure:"enable_feature"`
+//	    Timeout       string   `mapstructure:"timeout"`
+//	    Items         []string `mapstructure:"items"`
+//	}
 //
 //	type MyConfigUnmarshaler struct{}
 //
-//	func (u *MyConfigUnmarshaler) UnmarshalExporterConfig(data map[string]interface{}) (Config, error) {
-//	    // Parse your exporter's configuration
+//	func (u *MyConfigUnmarshaler) GetConfigStruct() Config {
+//	    return &MyConfig{}
 //	}
 //
 // Then create a receiver factory:
@@ -70,7 +76,14 @@
 //	  prometheus/myexporter:
 //	    scrape_interval: 30s
 //	    exporter_config:
-//	      # Your exporter-specific configuration here
+//	      enable_feature: true
+//	      timeout: "30s"
+//	      items: ["item1", "item2"]
+//
+// The framework automatically validates configuration using mapstructure tags:
+// - Unknown fields are rejected
+// - Type mismatches are caught (e.g., string where bool expected)
+// - Custom validation can be added via the Config.Validate() method
 //
 // # Architecture
 //
