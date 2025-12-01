@@ -6,7 +6,7 @@ require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/coreos/go-systemd/v22 v22.6.0
 	github.com/mdlayher/vsock v1.2.1
-	github.com/prometheus/common v0.67.2
+	github.com/prometheus/common v0.67.4
 	go.yaml.in/yaml/v2 v2.4.3
 	golang.org/x/crypto v0.45.0
 	golang.org/x/sync v0.18.0
@@ -17,6 +17,8 @@ require (
 	github.com/alecthomas/units v0.0.0-20240927000941-0f3dac36c52b // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/jpillora/backoff v1.0.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mdlayher/socket v0.4.1 // indirect
