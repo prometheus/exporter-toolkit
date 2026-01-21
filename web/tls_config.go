@@ -68,6 +68,9 @@ type FlagConfig struct {
 	WebListenAddresses *[]string
 	WebSystemdSocket   *bool
 	WebConfigFile      *string
+	WebExternalURL     *string
+	WebRoutePrefix     *string
+	WebMetricsPath     *string
 }
 
 // SetDirectory joins any relative file paths with dir.
