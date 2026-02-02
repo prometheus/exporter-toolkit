@@ -67,7 +67,8 @@ type TLSConfig struct {
 type FlagConfig struct {
 	WebListenAddresses *[]string
 	WebSystemdSocket   *bool
-	WebConfigFile      *string
+	WebConfigFile      *string // Optional: path to the TLS config file. Ether this or TLSConfig must be set.
+	WebConfig          *Config // Optional: Configuration. If set, it overrides WebConfigFile.
 }
 
 // SetDirectory joins any relative file paths with dir.
@@ -143,6 +144,11 @@ func getTLSConfig(configPath string) (*tls.Config, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if err := validateUsers(c); err != nil {
+		return nil, err
+	}
+
 	return ConfigToTLSConfig(&c.TLSConfig)
 }
 
@@ -352,13 +358,28 @@ func parseVsockPort(address string) (uint32, error) {
 // WebConfigFile in the FlagConfig, TLS or basic auth could be enabled.
 func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
 	logger.Info("Listening on", "address", l.Addr().String())
-	tlsConfigPath := *flags.WebConfigFile
-	if tlsConfigPath == "" {
-		logger.Info("TLS is disabled.", "http2", false, "address", l.Addr().String())
-		return server.Serve(l)
+	var c *Config
+	var err error
+
+	// WebConfig overrides WebConfigFile. If WebConfig field is not set, then WebConfigFile is used.
+	if flags.WebConfig == nil {
+		tlsConfigPath := *flags.WebConfigFile
+		if tlsConfigPath == "" {
+			logger.Info("TLS is disabled.", "http2", false, "address", l.Addr().String())
+			return server.Serve(l)
+		}
+
+		c, err = getConfig(tlsConfigPath)
+		if err != nil {
+			return err
+		}
+	} else {
+		// Use the provided config.
+		c = flags.WebConfig
 	}
 
-	if err := validateUsers(tlsConfigPath); err != nil {
+	err = ValidateWebConfig(c)
+	if err != nil {
 		return err
 	}
 
@@ -368,11 +389,6 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 		handler = server.Handler
 	}
 
-	c, err := getConfig(tlsConfigPath)
-	if err != nil {
-		return err
-	}
-
 	var limiter *rate.Limiter
 	if c.RateLimiterConfig.Interval != 0 {
 		limiter = rate.NewLimiter(rate.Every(c.RateLimiterConfig.Interval), c.RateLimiterConfig.Burst)
@@ -380,11 +396,11 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 	}
 
 	server.Handler = &webHandler{
-		tlsConfigPath: tlsConfigPath,
-		logger:        logger,
-		handler:       handler,
-		cache:         newCache(),
-		limiter:       limiter,
+		config:  c,
+		logger:  logger,
+		handler: handler,
+		cache:   newCache(),
+		limiter: limiter,
 	}
 
 	config, err := ConfigToTLSConfig(&c.TLSConfig)
@@ -409,12 +425,29 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 	// Set the GetConfigForClient method of the HTTPS server so that the config
 	// and certs are reloaded on new connections.
 	server.TLSConfig.GetConfigForClient = func(*tls.ClientHelloInfo) (*tls.Config, error) {
-		config, err := getTLSConfig(tlsConfigPath)
-		if err != nil {
-			return nil, err
+		var tlsConfig *tls.Config
+		var err error
+		// Config overrides WebConfigFile. If Config fiels is not set, then WebConfigFile is used.
+		if flags.WebConfig == nil {
+			tlsConfigPath := *flags.WebConfigFile
+
+			tlsConfig, err = getTLSConfig(tlsConfigPath)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			err = ValidateWebConfig(flags.WebConfig)
+			if err != nil {
+				return nil, err
+			}
+			// Use the provided config.
+			tlsConfig, err = ConfigToTLSConfig(&flags.WebConfig.TLSConfig)
+			if err != nil {
+				return nil, err
+			}
 		}
-		config.NextProtos = server.TLSConfig.NextProtos
-		return config, nil
+		tlsConfig.NextProtos = server.TLSConfig.NextProtos
+		return tlsConfig, nil
 	}
 	return server.ServeTLS(l, "", "")
 }
@@ -424,11 +457,11 @@ func Validate(tlsConfigPath string) error {
 	if tlsConfigPath == "" {
 		return nil
 	}
-	if err := validateUsers(tlsConfigPath); err != nil {
-		return err
-	}
 	c, err := getConfig(tlsConfigPath)
 	if err != nil {
+		return err
+	}
+	if err := validateUsers(c); err != nil {
 		return err
 	}
 	_, err = ConfigToTLSConfig(&c.TLSConfig)
@@ -436,6 +469,23 @@ func Validate(tlsConfigPath string) error {
 		return nil
 	}
 	return err
+}
+
+// ValidateWebConfig validates the web configuration, including the TLS config and HTTP headers.
+func ValidateWebConfig(config *Config) error {
+	if config == nil {
+		return nil
+	}
+	if err := validateUsers(config); err != nil {
+		return err
+	}
+	if err := validateHeaderConfig(config.HTTPConfig.Header); err != nil {
+		return err
+	}
+	if _, err := ConfigToTLSConfig(&config.TLSConfig); err != nil && err != errNoTLSConfig {
+		return err
+	}
+	return nil
 }
 
 type Cipher uint16
