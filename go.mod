@@ -6,7 +6,7 @@ require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/coreos/go-systemd/v22 v22.7.0
 	github.com/mdlayher/vsock v1.2.1
-	github.com/prometheus/common v0.67.4
+	github.com/prometheus/common v0.67.5
 	go.yaml.in/yaml/v2 v2.4.3
 	golang.org/x/crypto v0.47.0
 	golang.org/x/sync v0.19.0
@@ -29,8 +29,8 @@ require (
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
 	golang.org/x/net v0.48.0 // indirect
-	golang.org/x/oauth2 v0.32.0 // indirect
+	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
-	google.golang.org/protobuf v1.36.10 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 )
