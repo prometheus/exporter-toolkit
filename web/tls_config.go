@@ -14,6 +14,7 @@
 package web
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -31,6 +32,9 @@ import (
 	"github.com/coreos/go-systemd/v22/activation"
 	"github.com/mdlayher/vsock"
 	config_util "github.com/prometheus/common/config"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
+	"github.com/spiffe/go-spiffe/v2/workloadapi"
 	"go.yaml.in/yaml/v2"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
@@ -62,12 +66,19 @@ type TLSConfig struct {
 	MaxVersion               TLSVersion         `yaml:"max_version"`
 	PreferServerCipherSuites bool               `yaml:"prefer_server_cipher_suites"`
 	ClientAllowedSans        []string           `yaml:"client_allowed_sans"`
+	Spiffe                   SpiffeConfig       `yaml:"spiffe"`
 }
 
 type FlagConfig struct {
 	WebListenAddresses *[]string
 	WebSystemdSocket   *bool
 	WebConfigFile      *string
+}
+
+type SpiffeConfig struct {
+	Enabled       bool      `yaml:"enabled"`
+	SocketPath    string    `yaml:"socket_path"`
+	AuthorizedIDs *[]string `yaml:"authorized_ids"`
 }
 
 // SetDirectory joins any relative file paths with dir.
@@ -138,15 +149,19 @@ func getConfig(configPath string) (*Config, error) {
 	return c, err
 }
 
-func getTLSConfig(configPath string) (*tls.Config, error) {
+func getTLSConfig(configPath string, logger *slog.Logger) (*tls.Config, error) {
 	c, err := getConfig(configPath)
 	if err != nil {
 		return nil, err
 	}
-	return ConfigToTLSConfig(&c.TLSConfig)
+	return ConfigToTLSConfig(&c.TLSConfig, logger)
 }
 
 func validateTLSPaths(c *TLSConfig) error {
+	// If SPIFFE is enabled, we don't need traditional cert files.
+	if c.Spiffe.Enabled {
+		return nil
+	}
 	if c.TLSCertPath == "" && c.TLSCert == "" &&
 		c.TLSKeyPath == "" && c.TLSKey == "" &&
 		c.ClientCAs == "" && c.ClientCAsText == "" &&
@@ -166,9 +181,13 @@ func validateTLSPaths(c *TLSConfig) error {
 }
 
 // ConfigToTLSConfig generates the golang tls.Config from the TLSConfig struct.
-func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
+func ConfigToTLSConfig(c *TLSConfig, logger *slog.Logger) (*tls.Config, error) {
 	if err := validateTLSPaths(c); err != nil {
 		return nil, err
+	}
+
+	if c.Spiffe.Enabled {
+		return generateSpiffeConfig(c.Spiffe, logger)
 	}
 
 	loadCert := func() (*tls.Certificate, error) {
@@ -271,6 +290,57 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 
 	return cfg, nil
 }
+
+func generateSpiffeConfig(cfg SpiffeConfig, logger *slog.Logger) (*tls.Config, error) {
+	ctx := context.Background()
+
+	var clientOptions []workloadapi.ClientOption
+	if cfg.SocketPath != "" {
+		clientOptions = append(clientOptions, workloadapi.WithAddr(cfg.SocketPath))
+	}
+
+	sourceOptions := []workloadapi.X509SourceOption{
+		workloadapi.WithClientOptions(clientOptions...),
+	}
+
+	source, err := workloadapi.NewX509Source(ctx, sourceOptions...)
+	if err != nil {
+		return nil, fmt.Errorf("could not create SPIFFE source: %w", err)
+	}
+
+	var authorizer tlsconfig.Authorizer
+
+	if cfg.AuthorizedIDs == nil || len(*cfg.AuthorizedIDs) == 0 {
+		svid, err := source.GetX509SVID()
+		logger.Info("Starting up SPIFFE Workload Listeners.")
+		if err != nil {
+			return nil, fmt.Errorf("could not fetch SVID to determine trust domain: %w", err)
+		}
+		td := svid.ID.TrustDomain()
+		logger.Info("SPIFFE Trust Domain detected", "trust_domain", td.String())
+
+		// Construct spiffe://<trust-domain>/prometheus
+		prometheusID, err := spiffeid.FromPath(td, "/prometheus")
+		if err != nil {
+			return nil, fmt.Errorf("could not create prometheus SPIFFE ID: %w", err)
+		}
+
+		authorizer = tlsconfig.AuthorizeID(prometheusID)
+	} else {
+		ids := make([]spiffeid.ID, 0, len(*cfg.AuthorizedIDs))
+		for _, s := range *cfg.AuthorizedIDs {
+			id, err := spiffeid.FromString(s)
+			if err != nil {
+				return nil, fmt.Errorf("invalid SPIFFE ID %q: %w", s, err)
+			}
+			ids = append(ids, id)
+		}
+		authorizer = tlsconfig.AuthorizeOneOf(ids...)
+	}
+
+	return tlsconfig.MTLSServerConfig(source, source, authorizer), nil
+}
+
 
 // ServeMultiple starts the server on the given listeners. The FlagConfig is
 // also passed on to Serve.
@@ -387,7 +457,7 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 		limiter:       limiter,
 	}
 
-	config, err := ConfigToTLSConfig(&c.TLSConfig)
+	config, err := ConfigToTLSConfig(&c.TLSConfig, logger)
 	switch err {
 	case nil:
 		if !c.HTTPConfig.HTTP2 {
@@ -409,7 +479,7 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 	// Set the GetConfigForClient method of the HTTPS server so that the config
 	// and certs are reloaded on new connections.
 	server.TLSConfig.GetConfigForClient = func(*tls.ClientHelloInfo) (*tls.Config, error) {
-		config, err := getTLSConfig(tlsConfigPath)
+		config, err := getTLSConfig(tlsConfigPath, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -420,7 +490,7 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 }
 
 // Validate configuration file by reading the configuration and the certificates.
-func Validate(tlsConfigPath string) error {
+func Validate(tlsConfigPath string, logger *slog.Logger) error {
 	if tlsConfigPath == "" {
 		return nil
 	}
@@ -431,7 +501,7 @@ func Validate(tlsConfigPath string) error {
 	if err != nil {
 		return err
 	}
-	_, err = ConfigToTLSConfig(&c.TLSConfig)
+	_, err = ConfigToTLSConfig(&c.TLSConfig, logger)
 	if err == errNoTLSConfig {
 		return nil
 	}

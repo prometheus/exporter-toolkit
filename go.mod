@@ -7,6 +7,7 @@ require (
 	github.com/coreos/go-systemd/v22 v22.7.0
 	github.com/mdlayher/vsock v1.2.1
 	github.com/prometheus/common v0.67.5
+	github.com/spiffe/go-spiffe/v2 v2.6.0
 	go.yaml.in/yaml/v2 v2.4.3
 	golang.org/x/crypto v0.48.0
 	golang.org/x/sync v0.19.0
@@ -14,9 +15,11 @@ require (
 )
 
 require (
+	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/alecthomas/units v0.0.0-20240927000941-0f3dac36c52b // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.2 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/jpillora/backoff v1.0.0 // indirect
@@ -32,5 +35,7 @@ require (
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250707201910-8d1bb00bc6a7 // indirect
+	google.golang.org/grpc v1.75.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
