@@ -10,7 +10,7 @@ require (
 	go.yaml.in/yaml/v2 v2.4.3
 	golang.org/x/crypto v0.49.0
 	golang.org/x/sync v0.20.0
-	golang.org/x/time v0.14.0
+	golang.org/x/time v0.15.0
 )
 
 require (
