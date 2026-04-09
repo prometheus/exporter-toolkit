@@ -578,7 +578,7 @@ func (test *TestInputs) Test(t *testing.T) {
 }
 
 func (test *TestInputs) TestValidate(t *testing.T) {
-	validationErr := Validate(test.YAMLConfigPath)
+	validationErr := Validate(test.YAMLConfigPath, slog.Default())
 	if test.ExpectedError == nil {
 		if validationErr != nil {
 			t.Errorf("Expected no error, got error: %v", validationErr)
