@@ -75,18 +75,15 @@ func TestBasicAuthCache(t *testing.T) {
 		start = make(chan struct{})
 		wg    sync.WaitGroup
 	)
-	wg.Add(300)
-	for i := 0; i < 150; i++ {
-		go func() {
+	for range 150 {
+		wg.Go(func() {
 			<-start
 			login("alice", "alice123", 200)
-			wg.Done()
-		}()
-		go func() {
+		})
+		wg.Go(func() {
 			<-start
 			login("alice", "alice1234", 401)
-			wg.Done()
-		}()
+		})
 	}
 	close(start)
 	wg.Wait()

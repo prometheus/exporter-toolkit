@@ -23,7 +23,7 @@ import (
 func TestCacheSize(t *testing.T) {
 	cache := newCache()
 	expectedSize := 0
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		cache.set(fmt.Sprintf("foo%d", i), true)
 		expectedSize++
 		if expectedSize > 100 {

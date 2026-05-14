@@ -4,6 +4,7 @@ formatters:
 linters:
   enable:
     - misspell
+    - modernize
     - revive
   exclusions:
     generated: strict
