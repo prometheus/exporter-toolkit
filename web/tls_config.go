@@ -39,6 +39,7 @@ import (
 
 var (
 	errNoTLSConfig = errors.New("TLS config is not present")
+	ErrMissingFlag = errors.New("missing required flag configuration")
 	ErrNoListeners = errors.New("no web listen address or systemd socket flag specified")
 )
 
@@ -66,9 +67,29 @@ type TLSConfig struct {
 }
 
 type FlagConfig struct {
+	// MetricsPath is the path where the exporter serves metrics.
+	MetricsPath *string
+	// WebListenAddresses contains the listen addresses for the HTTP server.
 	WebListenAddresses *[]string
-	WebSystemdSocket   *bool
-	WebConfigFile      *string
+	// WebSystemdSocket enables systemd socket activation listeners.
+	WebSystemdSocket *bool
+	// WebConfigFile points to the TLS and authentication configuration file.
+	WebConfigFile *string
+}
+
+// CheckFlags validates that the flag configuration contains the required
+// listener and web config fields needed by the web package.
+func (c *FlagConfig) CheckFlags() error {
+	if c == nil {
+		return ErrMissingFlag
+	}
+	if c.WebConfigFile == nil {
+		return ErrMissingFlag
+	}
+	if c.WebSystemdSocket == nil && (c.WebListenAddresses == nil || len(*c.WebListenAddresses) == 0) {
+		return ErrNoListeners
+	}
+	return nil
 }
 
 // SetDirectory joins any relative file paths with dir.
@@ -290,8 +311,8 @@ func ServeMultiple(listeners []net.Listener, server *http.Server, flags *FlagCon
 // FlagConfig is true.
 // The FlagConfig is also passed on to ServeMultiple.
 func ListenAndServe(server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
-	if flags.WebSystemdSocket == nil && (flags.WebListenAddresses == nil || len(*flags.WebListenAddresses) == 0) {
-		return ErrNoListeners
+	if err := flags.CheckFlags(); err != nil {
+		return err
 	}
 
 	if flags.WebSystemdSocket != nil && *flags.WebSystemdSocket {

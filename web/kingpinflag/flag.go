@@ -37,6 +37,10 @@ func AddFlags(a flagGroup, defaultAddress string) *web.FlagConfig {
 		).Bool()
 	}
 	flags := web.FlagConfig{
+		MetricsPath: a.Flag(
+			"web.telemetry-path",
+			"Path under which to expose metrics.",
+		).Default("/metrics").String(),
 		WebListenAddresses: a.Flag(
 			"web.listen-address",
 			"Addresses on which to expose metrics and web interface. Repeatable for multiple addresses. Examples: `:9100` or `[::1]:9100` for http, `vsock://:9100` for vsock",
