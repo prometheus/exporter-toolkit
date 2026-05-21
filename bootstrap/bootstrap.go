@@ -1,4 +1,4 @@
-// Copyright 2026 The Prometheus Authors
+// Copyright The Prometheus Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -19,7 +19,6 @@ package bootstrap
 
 import (
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -33,13 +32,15 @@ import (
 )
 
 var (
-	// ErrNoMetricsHandler is returned when no metrics handler source was configured.
-	ErrNoMetricsHandler = errors.New("missing metrics handler")
-	// ErrMultipleMetricsSource is returned when both a static handler and a
+	// errNoMetricsHandler is returned when no metrics handler source was configured.
+	errNoMetricsHandler = errors.New("missing metrics handler")
+	// errMultipleMetricsSource is returned when both a static handler and a
 	// handler factory were configured.
-	ErrMultipleMetricsSource = errors.New("only one metrics handler source may be configured")
-	// ErrMissingMetricsPathFlag is returned when the metrics path flag was not initialized.
-	ErrMissingMetricsPathFlag = errors.New("missing metrics path flag configuration")
+	errMultipleMetricsSource = errors.New("only one metrics handler source may be configured")
+	// errEmptyMetricsPath is returned when the configured metrics path is empty.
+	errEmptyMetricsPath = errors.New("metrics path must not be empty")
+	// errNegativeMaxRequests is returned when max requests is configured below zero.
+	errNegativeMaxRequests = errors.New("web max requests must be greater than or equal to zero")
 )
 
 // MetricsHandlerFactory builds an exporter-specific metrics handler after the
@@ -51,6 +52,8 @@ type MetricsHandlerFactory func(*Bootstrap) (http.Handler, error)
 type Bootstrap struct {
 	// Logger is the configured logger for the exporter process.
 	Logger *slog.Logger
+	// MetricsPath is the parsed value of --web.telemetry-path.
+	MetricsPath string
 	// FlagConfig contains the parsed exporter-toolkit web flags.
 	FlagConfig *web.FlagConfig
 	// DisableExporterMetrics reports whether exporter self-metrics should be disabled.
@@ -88,11 +91,14 @@ type Runner struct {
 	logConfig *promslog.Config
 	provided  Config
 
+	metricsPath            *string
 	disableExporterMetrics *bool
 	maxRequests            *int
 
 	// Logger is the resolved logger after parsing configuration.
 	Logger *slog.Logger
+	// MetricsPath is the parsed value of --web.telemetry-path.
+	MetricsPath string
 	// FlagConfig contains the parsed exporter-toolkit web flags.
 	FlagConfig *web.FlagConfig
 	// DisableExporterMetrics is the parsed value of --web.disable-exporter-metrics.
@@ -107,8 +113,8 @@ type Runner struct {
 	MetricsHandlerFactory MetricsHandlerFactory
 }
 
-// AddFlags adds the common exporter web flags to a Kingpin application.
-func AddFlags(a *kingpin.Application, defaultAddress string) *web.FlagConfig {
+// addFlags adds the common exporter web flags to a Kingpin application.
+func addFlags(a *kingpin.Application, defaultAddress string) *web.FlagConfig {
 	return kingpinflag.AddFlags(a, defaultAddress)
 }
 
@@ -126,7 +132,11 @@ func New(c Config) *Runner {
 		LandingConfig:         c.LandingConfig,
 		MetricsHandler:        c.MetricsHandler,
 		MetricsHandlerFactory: c.MetricsHandlerFactory,
-		FlagConfig:            AddFlags(app, c.DefaultAddress),
+		FlagConfig:            addFlags(app, c.DefaultAddress),
+		metricsPath: app.Flag(
+			"web.telemetry-path",
+			"Path under which to expose metrics.",
+		).Default("/metrics").String(),
 		disableExporterMetrics: app.Flag(
 			"web.disable-exporter-metrics",
 			"Exclude metrics about the exporter itself (promhttp_*, process_*, go_*).",
@@ -150,23 +160,21 @@ func New(c Config) *Runner {
 	return t
 }
 
-// Parse parses the provided arguments and resolves the derived bootstrap state.
-func (t *Runner) Parse(args []string) error {
+// parse parses the provided arguments and resolves the derived bootstrap state.
+func (t *Runner) parse(args []string) error {
 	if _, err := t.app.Parse(args); err != nil {
 		return err
 	}
-	if err := t.FlagConfig.CheckFlags(); err != nil {
-		return err
-	}
-	if t.FlagConfig.MetricsPath == nil || *t.FlagConfig.MetricsPath == "" {
-		return ErrMissingMetricsPathFlag
+	if *t.metricsPath == "" {
+		return errEmptyMetricsPath
 	}
 	if *t.maxRequests < 0 {
-		return fmt.Errorf("web max requests must be greater than or equal to zero")
+		return errNegativeMaxRequests
 	}
 	if t.Logger == nil {
 		t.Logger = promslog.New(t.logConfig)
 	}
+	t.MetricsPath = *t.metricsPath
 	t.DisableExporterMetrics = *t.disableExporterMetrics
 	t.MaxRequests = *t.maxRequests
 	t.LandingConfig = t.defaultLandingConfig()
@@ -175,12 +183,12 @@ func (t *Runner) Parse(args []string) error {
 
 // Run parses os.Args and starts serving the configured exporter endpoints.
 func (t *Runner) Run() error {
-	return t.RunWithArgs(os.Args[1:])
+	return t.runWithArgs(os.Args[1:])
 }
 
-// RunWithArgs parses the provided args and starts the exporter HTTP server.
-func (t *Runner) RunWithArgs(args []string) error {
-	if err := t.Parse(args); err != nil {
+// runWithArgs parses the provided args and starts the exporter HTTP server.
+func (t *Runner) runWithArgs(args []string) error {
+	if err := t.parse(args); err != nil {
 		return err
 	}
 	handler, err := t.resolveMetricsHandler()
@@ -207,14 +215,15 @@ func (t *Runner) resolveMetricsHandler() (http.Handler, error) {
 		sources++
 	}
 	if sources == 0 {
-		return nil, ErrNoMetricsHandler
+		return nil, errNoMetricsHandler
 	}
 	if sources > 1 {
-		return nil, ErrMultipleMetricsSource
+		return nil, errMultipleMetricsSource
 	}
 	if t.MetricsHandlerFactory != nil {
 		return t.MetricsHandlerFactory(&Bootstrap{
 			Logger:                 t.Logger,
+			MetricsPath:            t.MetricsPath,
 			FlagConfig:             t.FlagConfig,
 			DisableExporterMetrics: t.DisableExporterMetrics,
 			MaxRequests:            t.MaxRequests,
@@ -225,7 +234,7 @@ func (t *Runner) resolveMetricsHandler() (http.Handler, error) {
 
 func (t *Runner) newServer(metricsHandler http.Handler) (*http.Server, error) {
 	mux := http.NewServeMux()
-	metricsPath := *t.FlagConfig.MetricsPath
+	metricsPath := t.MetricsPath
 	mux.Handle(metricsPath, metricsHandler)
 
 	if metricsPath != "/" {

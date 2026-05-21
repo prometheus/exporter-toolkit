@@ -67,8 +67,6 @@ type TLSConfig struct {
 }
 
 type FlagConfig struct {
-	// MetricsPath is the path where the exporter serves metrics.
-	MetricsPath *string
 	// WebListenAddresses contains the listen addresses for the HTTP server.
 	WebListenAddresses *[]string
 	// WebSystemdSocket enables systemd socket activation listeners.
@@ -77,9 +75,9 @@ type FlagConfig struct {
 	WebConfigFile *string
 }
 
-// CheckFlags validates that the flag configuration contains the required
+// checkFlags validates that the flag configuration contains the required
 // listener and web config fields needed by the web package.
-func (c *FlagConfig) CheckFlags() error {
+func (c *FlagConfig) checkFlags() error {
 	if c == nil {
 		return ErrMissingFlag
 	}
@@ -311,7 +309,7 @@ func ServeMultiple(listeners []net.Listener, server *http.Server, flags *FlagCon
 // FlagConfig is true.
 // The FlagConfig is also passed on to ServeMultiple.
 func ListenAndServe(server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
-	if err := flags.CheckFlags(); err != nil {
+	if err := flags.checkFlags(); err != nil {
 		return err
 	}
 

@@ -1,4 +1,4 @@
-// Copyright 2026 The Prometheus Authors
+// Copyright The Prometheus Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -31,7 +31,7 @@ func TestParseRejectsNegativeMaxRequests(t *testing.T) {
 		MetricsHandler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
 	})
 
-	err := tk.Parse([]string{"--web.max-requests=-1", "--web.listen-address=:9100"})
+	err := tk.parse([]string{"--web.max-requests=-1", "--web.listen-address=:9100"})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -48,11 +48,11 @@ func TestResolveMetricsHandlerRejectsMultipleSources(t *testing.T) {
 		},
 	})
 
-	if err := tk.Parse([]string{"--web.listen-address=:9100"}); err != nil {
+	if err := tk.parse([]string{"--web.listen-address=:9100"}); err != nil {
 		t.Fatalf("unexpected parse error: %v", err)
 	}
-	if _, err := tk.resolveMetricsHandler(); err != ErrMultipleMetricsSource {
-		t.Fatalf("unexpected error: got %v, want %v", err, ErrMultipleMetricsSource)
+	if _, err := tk.resolveMetricsHandler(); err != errMultipleMetricsSource {
+		t.Fatalf("unexpected error: got %v, want %v", err, errMultipleMetricsSource)
 	}
 }
 
@@ -68,7 +68,7 @@ func TestResolveMetricsHandlerFactoryReceivesParsedBootstrap(t *testing.T) {
 		},
 	})
 
-	if err := tk.Parse([]string{"--web.max-requests=7", "--web.disable-exporter-metrics", "--web.listen-address=:9100"}); err != nil {
+	if err := tk.parse([]string{"--web.max-requests=7", "--web.disable-exporter-metrics", "--web.listen-address=:9100"}); err != nil {
 		t.Fatalf("unexpected parse error: %v", err)
 	}
 	if _, err := tk.resolveMetricsHandler(); err != nil {
@@ -80,8 +80,8 @@ func TestResolveMetricsHandlerFactoryReceivesParsedBootstrap(t *testing.T) {
 	if !got.DisableExporterMetrics {
 		t.Fatal("expected disable exporter metrics to be true")
 	}
-	if got.FlagConfig == nil || got.FlagConfig.MetricsPath == nil || *got.FlagConfig.MetricsPath != "/metrics" {
-		t.Fatal("expected default metrics path to be available in bootstrap")
+	if got.MetricsPath != "/metrics" {
+		t.Fatalf("unexpected metrics path: got %q, want %q", got.MetricsPath, "/metrics")
 	}
 }
 
@@ -97,7 +97,7 @@ func TestNewServerRegistersMetricsAndLandingPage(t *testing.T) {
 		}),
 	})
 
-	if err := tk.Parse([]string{"--web.listen-address=:9100"}); err != nil {
+	if err := tk.parse([]string{"--web.listen-address=:9100"}); err != nil {
 		t.Fatalf("unexpected parse error: %v", err)
 	}
 	handler, err := tk.resolveMetricsHandler()
