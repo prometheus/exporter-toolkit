@@ -1,0 +1,4 @@
+ip_socket_config:
+  ipv4_ttl: 2
+  ipv6_hop_limit: 2
+  dscp: 46
