@@ -48,6 +48,7 @@ type Config struct {
 	HTTPConfig        HTTPConfig                    `yaml:"http_server_config"`
 	RateLimiterConfig RateLimiterConfig             `yaml:"rate_limit"`
 	Users             map[string]config_util.Secret `yaml:"basic_auth_users"`
+	IPSocketConfig    IPSocketConfig                `yaml:"ip_socket_config"`
 }
 
 type TLSConfig struct {
@@ -73,6 +74,15 @@ type FlagConfig struct {
 	WebSystemdSocket *bool
 	// WebConfigFile points to the TLS and authentication configuration file.
 	WebConfigFile *string
+	// WebIPv4TTL is the IPv4 TTL to set on the listening socket.
+	// Sentinel 0 (or nil) means "not configured; use kernel default".
+	WebIPv4TTL *uint8
+	// WebIPv6HopLimit is the IPv6 Hop Limit to set on the listening socket.
+	// Sentinel 0 (or nil) means "not configured; use kernel default".
+	WebIPv6HopLimit *uint8
+	// WebDSCP is the DSCP codepoint (upper 6 bits of IP ToS / IPv6 Traffic Class).
+	// Sentinel -1 (or nil) means "not configured". Valid configured range: 0-63.
+	WebDSCP *int
 }
 
 // checkFlags validates that the flag configuration contains the required
@@ -135,6 +145,25 @@ type RateLimiterConfig struct {
 	Interval time.Duration `yaml:"interval"`
 }
 
+// IPSocketConfig configures IP-layer socket options applied to the listening
+// socket. All fields are optional; an omitted (nil) field means "not configured;
+// use the kernel default".
+//
+// Valid ranges:
+//   - IPv4TTL, IPv6HopLimit: 1-255. (TTL=0 is forbidden by RFC 1122 and not
+//     useful since the first router decrements it to -1 and discards.)
+//   - DSCP: 0-63. The 6-bit DSCP codepoint is shifted into the upper 6 bits of
+//     the IPv4 ToS / IPv6 Traffic Class byte; the lower 2 bits (ECN) are left
+//     for the kernel to manage on ECN-capable TCP connections.
+//
+// On Linux, options set on the listening socket are inherited by accepted
+// connections including the SYN-ACK packet. See accept(2), ip(7), ipv6(7).
+type IPSocketConfig struct {
+	IPv4TTL      *uint8 `yaml:"ipv4_ttl"`
+	IPv6HopLimit *uint8 `yaml:"ipv6_hop_limit"`
+	DSCP         *int   `yaml:"dscp"`
+}
+
 func getConfig(configPath string) (*Config, error) {
 	content, err := os.ReadFile(configPath)
 	if err != nil {
@@ -152,8 +181,27 @@ func getConfig(configPath string) (*Config, error) {
 	if err == nil {
 		err = validateHeaderConfig(c.HTTPConfig.Header)
 	}
+	if err == nil {
+		err = validateIPSocketConfig(c.IPSocketConfig)
+	}
 	c.TLSConfig.SetDirectory(filepath.Dir(configPath))
 	return c, err
+}
+
+// validateIPSocketConfig enforces value-range rules. The uint8 type on the TTL
+// fields already excludes negatives and values >255 at YAML-parse time, so we
+// only need to reject the explicit-zero sentinel here.
+func validateIPSocketConfig(c IPSocketConfig) error {
+	if c.IPv4TTL != nil && *c.IPv4TTL < 1 {
+		return fmt.Errorf("ipv4_ttl must be in range 1-255, got %d", *c.IPv4TTL)
+	}
+	if c.IPv6HopLimit != nil && *c.IPv6HopLimit < 1 {
+		return fmt.Errorf("ipv6_hop_limit must be in range 1-255, got %d", *c.IPv6HopLimit)
+	}
+	if c.DSCP != nil && (*c.DSCP < 0 || *c.DSCP > 63) {
+		return fmt.Errorf("dscp must be in range 0-63, got %d", *c.DSCP)
+	}
+	return nil
 }
 
 func getTLSConfig(configPath string) (*tls.Config, error) {
