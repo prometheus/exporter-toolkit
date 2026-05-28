@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -710,5 +711,71 @@ func TestUsers(t *testing.T) {
 	}
 	for _, testInputs := range testTables {
 		t.Run(testInputs.Name, testInputs.Test)
+	}
+}
+
+// TestResolveSocketOptions_FlagValidation covers the flag-level range check
+// for DSCP. kingpin.Int() accepts any integer, so the only guardrail against
+// e.g. --web.dscp=999 silently producing a wrong wire value is the check
+// inside resolveSocketOptions.
+func TestResolveSocketOptions_FlagValidation(t *testing.T) {
+	i := func(v int) *int { return &v }
+	emptyFile := OfString("")
+	cases := []struct {
+		name      string
+		flags     *FlagConfig
+		wantErr   bool
+		wantMatch string // substring expected in the error
+	}{
+		{
+			name:    "dscp_in_range_lower",
+			flags:   &FlagConfig{WebDSCP: i(0), WebConfigFile: emptyFile},
+			wantErr: false,
+		},
+		{
+			name:    "dscp_in_range_upper",
+			flags:   &FlagConfig{WebDSCP: i(63), WebConfigFile: emptyFile},
+			wantErr: false,
+		},
+		{
+			name:    "dscp_sentinel_means_unset",
+			flags:   &FlagConfig{WebDSCP: i(-1), WebConfigFile: emptyFile},
+			wantErr: false,
+		},
+		{
+			name:      "dscp_above_range",
+			flags:     &FlagConfig{WebDSCP: i(999), WebConfigFile: emptyFile},
+			wantErr:   true,
+			wantMatch: "dscp must be in range 0-63",
+		},
+		{
+			name:      "dscp_negative_but_not_sentinel",
+			flags:     &FlagConfig{WebDSCP: i(-5), WebConfigFile: emptyFile},
+			wantErr:   true,
+			wantMatch: "dscp must be in range 0-63",
+		},
+		{
+			name:      "dscp_one_above_max",
+			flags:     &FlagConfig{WebDSCP: i(64), WebConfigFile: emptyFile},
+			wantErr:   true,
+			wantMatch: "dscp must be in range 0-63",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := resolveSocketOptions(tc.flags)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("resolveSocketOptions: expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), tc.wantMatch) {
+					t.Fatalf("resolveSocketOptions: error %q does not contain %q", err.Error(), tc.wantMatch)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("resolveSocketOptions: unexpected error: %v", err)
+			}
+		})
 	}
 }
