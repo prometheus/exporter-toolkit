@@ -22,15 +22,58 @@ import (
 	"time"
 )
 
-// TestBasicAuthCache validates that the cache is working by calling a password
-// protected endpoint multiple times.
-func TestBasicAuthCache(t *testing.T) {
+// handlerCase is one row in the TestHandler table. Each case starts an HTTP
+// server with the named YAML config and then runs `do` against it. The
+// per-case `do` function holds the assertions specific to that case; the
+// shared server lifecycle (start, wait, shutdown) is provided by
+// withHandlerServer so it doesn't have to be duplicated per case.
+type handlerCase struct {
+	name           string
+	yamlConfigPath string
+	do             func(t *testing.T)
+}
+
+func TestHandler(t *testing.T) {
+	cases := []handlerCase{
+		{
+			name:           "BasicAuthCache",
+			yamlConfigPath: "testdata/web_config_users_noTLS.good.yml",
+			do:             testBasicAuthCacheBody,
+		},
+		{
+			name:           "BasicAuthWithFakepassword",
+			yamlConfigPath: "testdata/web_config_users_noTLS.good.yml",
+			do:             testBasicAuthFakepasswordBody,
+		},
+		{
+			name:           "ByPassBasicAuthVuln",
+			yamlConfigPath: "testdata/web_config_users_noTLS.good.yml",
+			do:             testByPassBasicAuthVulnBody,
+		},
+		{
+			name:           "HTTPHeaders",
+			yamlConfigPath: "testdata/web_config_headers.good.yml",
+			do:             testHTTPHeadersBody,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			withHandlerServer(t, tc.yamlConfigPath, tc.do)
+		})
+	}
+}
+
+// withHandlerServer starts an http.Server on the package-level `port` using
+// the given YAML config, waits until the port is reachable, runs body, and
+// then shuts the server down. Replaces the per-test boilerplate that the
+// original four separate test functions duplicated.
+func withHandlerServer(t *testing.T, yamlConfigPath string, body func(t *testing.T)) {
+	t.Helper()
 	server := &http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Write([]byte("Hello World!"))
 		}),
 	}
-
 	done := make(chan struct{})
 	t.Cleanup(func() {
 		if err := server.Shutdown(context.Background()); err != nil {
@@ -38,19 +81,22 @@ func TestBasicAuthCache(t *testing.T) {
 		}
 		<-done
 	})
-
 	go func() {
 		flags := FlagConfig{
 			WebListenAddresses: &([]string{port}),
 			WebSystemdSocket:   OfBool(false),
-			WebConfigFile:      OfString("testdata/web_config_users_noTLS.good.yml"),
+			WebConfigFile:      OfString(yamlConfigPath),
 		}
 		ListenAndServe(server, &flags, testlogger)
 		close(done)
 	}()
-
 	waitForPort(t, port)
+	body(t)
+}
 
+// testBasicAuthCacheBody validates that the cache is working by calling a
+// password-protected endpoint repeatedly, then stressing it concurrently.
+func testBasicAuthCacheBody(t *testing.T) {
 	login := func(username, password string, code int) {
 		client := &http.Client{}
 		req, err := http.NewRequest("GET", "http://localhost"+port, nil)
@@ -89,35 +135,9 @@ func TestBasicAuthCache(t *testing.T) {
 	wg.Wait()
 }
 
-// TestBasicAuthWithFakePassword validates that we can't login the "fakepassword" used in
-// to prevent user enumeration.
-func TestBasicAuthWithFakepassword(t *testing.T) {
-	server := &http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte("Hello World!"))
-		}),
-	}
-
-	done := make(chan struct{})
-	t.Cleanup(func() {
-		if err := server.Shutdown(context.Background()); err != nil {
-			t.Fatal(err)
-		}
-		<-done
-	})
-
-	go func() {
-		flags := FlagConfig{
-			WebListenAddresses: &([]string{port}),
-			WebSystemdSocket:   OfBool(false),
-			WebConfigFile:      OfString("testdata/web_config_users_noTLS.good.yml"),
-		}
-		ListenAndServe(server, &flags, testlogger)
-		close(done)
-	}()
-
-	waitForPort(t, port)
-
+// testBasicAuthFakepasswordBody validates that we can't login with the
+// "fakepassword" used to prevent user enumeration.
+func testBasicAuthFakepasswordBody(t *testing.T) {
 	login := func() {
 		client := &http.Client{}
 		req, err := http.NewRequest("GET", "http://localhost"+port, nil)
@@ -133,41 +153,14 @@ func TestBasicAuthWithFakepassword(t *testing.T) {
 			t.Fatalf("bad return code, expected %d, got %d", 401, r.StatusCode)
 		}
 	}
-
 	// Login with a cold cache.
 	login()
 	// Login with the response cached.
 	login()
 }
 
-// TestByPassBasicAuthVuln tests for CVE-2022-46146.
-func TestByPassBasicAuthVuln(t *testing.T) {
-	server := &http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte("Hello World!"))
-		}),
-	}
-
-	done := make(chan struct{})
-	t.Cleanup(func() {
-		if err := server.Shutdown(context.Background()); err != nil {
-			t.Fatal(err)
-		}
-		<-done
-	})
-
-	go func() {
-		flags := FlagConfig{
-			WebListenAddresses: &([]string{port}),
-			WebSystemdSocket:   OfBool(false),
-			WebConfigFile:      OfString("testdata/web_config_users_noTLS.good.yml"),
-		}
-		ListenAndServe(server, &flags, testlogger)
-		close(done)
-	}()
-
-	waitForPort(t, port)
-
+// testByPassBasicAuthVulnBody tests for CVE-2022-46146.
+func testByPassBasicAuthVulnBody(t *testing.T) {
 	login := func(username, password string) {
 		client := &http.Client{}
 		req, err := http.NewRequest("GET", "http://localhost"+port, nil)
@@ -183,41 +176,15 @@ func TestByPassBasicAuthVuln(t *testing.T) {
 			t.Fatalf("bad return code, expected %d, got %d", 401, r.StatusCode)
 		}
 	}
-
 	// Poison the cache.
 	login("alice$2y$12$1DpfPeqF9HzHJt.EWswy1exHluGfbhnn3yXhR7Xes6m3WJqFg0Wby", "fakepassword")
 	// Login with a wrong password.
 	login("alice", "$2y$10$QOauhQNbBCuQDKes6eFzPeMqBSjb7Mr5DUmpZ/VcEd00UAV/LDeSifakepassword")
 }
 
-// TestHTTPHeaders validates that HTTP headers are added correctly.
-func TestHTTPHeaders(t *testing.T) {
-	server := &http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte("Hello World!"))
-		}),
-	}
-
-	done := make(chan struct{})
-	t.Cleanup(func() {
-		if err := server.Shutdown(context.Background()); err != nil {
-			t.Fatal(err)
-		}
-		<-done
-	})
-
-	go func() {
-		flags := FlagConfig{
-			WebListenAddresses: &([]string{port}),
-			WebSystemdSocket:   OfBool(false),
-			WebConfigFile:      OfString("testdata/web_config_headers.good.yml"),
-		}
-		ListenAndServe(server, &flags, testlogger)
-		close(done)
-	}()
-
-	waitForPort(t, port)
-
+// testHTTPHeadersBody validates that HTTP headers from web_config_headers.good.yml
+// are added correctly to responses.
+func testHTTPHeadersBody(t *testing.T) {
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", "http://localhost"+port, nil)
 	if err != nil {
@@ -227,7 +194,6 @@ func TestHTTPHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	for k, v := range map[string]string{
 		"Strict-Transport-Security": "max-age=31536000; includeSubDomains",
 		"X-Frame-Options":           "deny",
