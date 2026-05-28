@@ -132,9 +132,66 @@ basic_auth_users:
 rate_limit:
   interval: <duration> # time interval between two requests, set to 0 to disable rate limiter
   burst: <int> # and permits a burst of <int> requests.
+
+# IP-layer socket options applied to the listening socket.
+# All fields are optional; an omitted field uses the kernel default.
+ip_socket_config:
+  # IPv4 TTL on outbound packets. Valid: 1-255.
+  # Lower values bound how far response packets can travel; useful as a
+  # defense-in-depth measure (e.g. ttl=2 means packets die after two
+  # router hops). On Linux this is inherited by accepted connections
+  # (accept(2), ip(7)).
+  [ ipv4_ttl: <int> ]
+
+  # IPv6 Hop Limit on outbound packets. Valid: 1-255. Same semantics as
+  # ipv4_ttl but for IPv6.
+  [ ipv6_hop_limit: <int> ]
+
+  # DSCP codepoint applied to outbound packets via IPv4 ToS and IPv6
+  # Traffic Class (upper 6 bits). Valid: 0-63. Common values:
+  # 0 (CS0, best-effort), 8 (CS1), 16 (CS2), 26 (AF31), 46 (EF).
+  # The 2 ECN bits (lower 2 bits of the ToS byte) are NOT touched --
+  # the kernel manages them per-packet for ECN-capable TCP (RFC 3168).
+  [ dscp: <int> ]
 ```
 
 [A sample configuration file](web-config.yml) is provided.
+
+## About `ip_socket_config`
+
+The `ip_socket_config` block sets IP-layer header fields on the listening
+socket. Each option can also be set via a CLI flag or environment variable
+(`--web.ipv4-ttl` / `WEB_IPV4_TTL`, `--web.ipv6-hop-limit` /
+`WEB_IPV6_HOP_LIMIT`, `--web.dscp` / `WEB_DSCP`); the flag wins when both
+the flag and a YAML value are set.
+
+Listener-flavor support:
+
+| Listener | TTL / Hop Limit | DSCP |
+|---|---|---|
+| Regular TCP | Set on the listening socket via `net.ListenConfig.Control`; inherited by accepted connections. | Set per accepted connection (IP_TOS / IPV6_TCLASS are *not* inherited from the listener on Linux). |
+| Systemd socket activation | Set on the systemd-provided listener post-bind via `setsockopt`. | Set per accepted connection (same as regular TCP). |
+| VSOCK | Ignored (VSOCK has no IP layer); an info-level log line is emitted if any option is configured. | Same — ignored. |
+
+Platform support:
+
+| Platform | Status |
+|---|---|
+| Linux | Fully supported, CI-tested. |
+| FreeBSD / DragonFly / NetBSD / OpenBSD / Darwin | Compile-supported via `golang.org/x/sys/unix`; not CI-tested. |
+| Windows / Plan 9 / JS+Wasm / others | No-op. The first time any IP socket option is configured, a single warn-level log line is emitted and the configured values are ignored. |
+
+Operator notes:
+
+* The minimum useful TTL is **1** (packet dies at the first router; reach is
+  limited to the local L2 segment). TTL=0 is rejected by configuration
+  validation — it is forbidden by RFC 1122 §3.2.1.7 and Linux overloads
+  `setsockopt(IP_TTL, 0)` to mean "use the kernel default" anyway.
+* DSCP=0 (CS0) is a valid configured value and is honored; it is *not* the
+  "not configured" sentinel. Omit the field if you don't want to set DSCP.
+* On dual-stack listeners (e.g. `[::]:9100`) both the IPv4 and IPv6 socket
+  options are set; the kernel applies the appropriate one per outbound
+  packet.
 
 ## About bcrypt
 
