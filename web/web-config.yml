@@ -3,3 +3,18 @@
 tls_server_config:
   cert_file: server.crt
   key_file: server.key
+
+# Optional. Sets IP-layer fields on the exporter's listening socket. Each
+# field is optional; an omitted field leaves the kernel default in place.
+# See docs/web-configuration.md for the per-listener-flavor support matrix.
+#
+# ip_socket_config:
+#   # IPv4 TTL clamp on outbound packets (1-255). Lower values bound
+#   # packet propagation distance -- useful as defense-in-depth.
+#   ipv4_ttl: 2
+#   # IPv6 Hop Limit clamp on outbound packets (1-255).
+#   ipv6_hop_limit: 2
+#   # DSCP codepoint (0-63) applied to outbound packets via IPv4 ToS and
+#   # IPv6 Traffic Class (upper 6 bits). ECN bits left for the kernel.
+#   # Common values: 0 (CS0), 16 (CS2), 26 (AF31), 46 (EF).
+#   dscp: 16
