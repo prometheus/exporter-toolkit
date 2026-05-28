@@ -1,0 +1,2 @@
+ip_socket_config:
+  ipv4_ttl: 256

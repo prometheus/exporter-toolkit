@@ -68,9 +68,11 @@ var (
 		"Invalid header":           regexp.MustCompile(`HTTP header ".*" can not be configured`),
 		"Invalid client cert":      regexp.MustCompile(`bad certificate`),
 		// Introduced in Go 1.21
-		"Certificate required": regexp.MustCompile(`certificate required`),
-		"Unknown CA":           regexp.MustCompile(`unknown certificate authority`),
-		"Too Many Requests":    regexp.MustCompile(`Too Many Requests`),
+		"Certificate required":  regexp.MustCompile(`certificate required`),
+		"Unknown CA":            regexp.MustCompile(`unknown certificate authority`),
+		"Too Many Requests":     regexp.MustCompile(`Too Many Requests`),
+		"IPv4 TTL out of range": regexp.MustCompile(`ipv4_ttl must be in range`),
+		"DSCP out of range":     regexp.MustCompile(`dscp must be in range`),
 	}
 )
 
@@ -191,6 +193,31 @@ func TestYAMLFiles(t *testing.T) {
 			Name:           `invalid config yml (bad TLS version)`,
 			YAMLConfigPath: "testdata/web_config_noAuth_wrongTLSVersion.bad.yml",
 			ExpectedError:  ErrorMap["Unknown TLS version"],
+		},
+		{
+			Name:           `invalid config yml (ipv4_ttl = 0)`,
+			YAMLConfigPath: "testdata/web_config_ipv4_ttl_zero.bad.yml",
+			ExpectedError:  ErrorMap["IPv4 TTL out of range"],
+		},
+		{
+			Name:           `invalid config yml (ipv4_ttl = 256, uint8 overflow)`,
+			YAMLConfigPath: "testdata/web_config_ipv4_ttl_high.bad.yml",
+			ExpectedError:  ErrorMap["YAML error"],
+		},
+		{
+			Name:           `invalid config yml (dscp = -1)`,
+			YAMLConfigPath: "testdata/web_config_dscp_neg.bad.yml",
+			ExpectedError:  ErrorMap["DSCP out of range"],
+		},
+		{
+			Name:           `invalid config yml (dscp = 64)`,
+			YAMLConfigPath: "testdata/web_config_dscp_high.bad.yml",
+			ExpectedError:  ErrorMap["DSCP out of range"],
+		},
+		{
+			Name:           `valid ip_socket_config yml`,
+			YAMLConfigPath: "testdata/web_config_ip_socket.good.yml",
+			ExpectedError:  nil,
 		},
 	}
 	for _, testInputs := range testTables {
@@ -778,4 +805,63 @@ func TestResolveSocketOptions_FlagValidation(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestEffective covers the flag > YAML > default precedence logic. It does
+// not exercise socket options or networking -- just the generic helper.
+func TestEffective(t *testing.T) {
+	u8 := func(v uint8) *uint8 { return &v }
+	i := func(v int) *int { return &v }
+
+	t.Run("uint8", func(t *testing.T) {
+		cases := []struct {
+			name      string
+			flag      *uint8
+			sentinel  uint8
+			yaml      *uint8
+			wantVal   uint8
+			wantIsSet bool
+		}{
+			{"all_nil", nil, 0, nil, 0, false},
+			{"flag_set", u8(7), 0, nil, 7, true},
+			{"yaml_set", nil, 0, u8(3), 3, true},
+			{"flag_wins_over_yaml", u8(7), 0, u8(3), 7, true},
+			{"flag_is_sentinel_yaml_used", u8(0), 0, u8(3), 3, true},
+			{"flag_is_sentinel_yaml_nil", u8(0), 0, nil, 0, false},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				gotVal, gotIsSet := effective(tc.flag, tc.sentinel, tc.yaml)
+				if gotVal != tc.wantVal || gotIsSet != tc.wantIsSet {
+					t.Errorf("effective = (%d, %v), want (%d, %v)", gotVal, gotIsSet, tc.wantVal, tc.wantIsSet)
+				}
+			})
+		}
+	})
+
+	t.Run("int_dscp_semantics", func(t *testing.T) {
+		// DSCP uses -1 as the not-configured sentinel because 0 is a valid
+		// configured value (CS0). Verify both that explicit 0 wins and that
+		// -1 from the flag falls through to YAML / default.
+		cases := []struct {
+			name      string
+			flag      *int
+			yaml      *int
+			wantVal   int
+			wantIsSet bool
+		}{
+			{"flag_dscp_zero_is_configured", i(0), nil, 0, true},
+			{"flag_sentinel_yaml_zero", i(-1), i(0), 0, true},
+			{"flag_sentinel_yaml_nil", i(-1), nil, 0, false},
+			{"flag_dscp_set_wins", i(46), i(16), 46, true},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				gotVal, gotIsSet := effective(tc.flag, -1, tc.yaml)
+				if gotVal != tc.wantVal || gotIsSet != tc.wantIsSet {
+					t.Errorf("effective = (%d, %v), want (%d, %v)", gotVal, gotIsSet, tc.wantVal, tc.wantIsSet)
+				}
+			})
+		}
+	})
 }

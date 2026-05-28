@@ -1,0 +1,2 @@
+ip_socket_config:
+  dscp: 64
