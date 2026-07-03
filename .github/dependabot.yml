@@ -5,9 +5,18 @@ updates:
     schedule:
       interval: "monthly"
     groups:
-      golang_x:
+      aws:
+        patterns:
+          - "github.com/aws/*"
+      go.opentelemetry.io:
+        patterns:
+          - "go.opentelemetry.io/*"
+      golang.org-x:
         patterns:
           - "golang.org/x/*"
+      k8s.io:
+        patterns:
+          - "k8s.io/*"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
