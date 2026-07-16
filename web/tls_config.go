@@ -480,10 +480,11 @@ func (c Cipher) MarshalYAML() (any, error) {
 type Curve tls.CurveID
 
 var curves = map[string]Curve{
-	"CurveP256": (Curve)(tls.CurveP256),
-	"CurveP384": (Curve)(tls.CurveP384),
-	"CurveP521": (Curve)(tls.CurveP521),
-	"X25519":    (Curve)(tls.X25519),
+	"CurveP256":      (Curve)(tls.CurveP256),
+	"CurveP384":      (Curve)(tls.CurveP384),
+	"CurveP521":      (Curve)(tls.CurveP521),
+	"X25519":         (Curve)(tls.X25519),
+	"X25519MLKEM768": (Curve)(tls.X25519MLKEM768),
 }
 
 func (c *Curve) UnmarshalYAML(unmarshal func(any) error) error {
