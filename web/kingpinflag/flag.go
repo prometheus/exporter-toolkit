@@ -46,6 +46,18 @@ func AddFlags(a flagGroup, defaultAddress string) *web.FlagConfig {
 			"web.config.file",
 			"Path to configuration file that can enable TLS or authentication. See: https://github.com/prometheus/exporter-toolkit/blob/master/docs/web-configuration.md",
 		).Default("").String(),
+		WebIPv4TTL: a.Flag(
+			"web.ipv4-ttl",
+			"IPv4 TTL to set on the listening socket. Valid: 1-255. 0 (default) leaves the kernel default. Lower values bound how far response packets can travel.",
+		).Default("0").Envar("WEB_IPV4_TTL").Uint8(),
+		WebIPv6HopLimit: a.Flag(
+			"web.ipv6-hop-limit",
+			"IPv6 Hop Limit to set on the listening socket. Valid: 1-255. 0 (default) leaves the kernel default.",
+		).Default("0").Envar("WEB_IPV6_HOP_LIMIT").Uint8(),
+		WebDSCP: a.Flag(
+			"web.dscp",
+			"DSCP codepoint applied to outbound packets via IPv4 ToS and IPv6 Traffic Class (upper 6 bits). Valid: 0-63. -1 (default) leaves the kernel default. ECN bits are left for the kernel.",
+		).Default("-1").Envar("WEB_DSCP").Int(),
 	}
 	return &flags
 }
