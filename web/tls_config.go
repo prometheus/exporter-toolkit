@@ -106,7 +106,7 @@ func (t *TLSConfig) VerifyPeerCertificate(rawCerts [][]byte, _ [][]*x509.Certifi
 	}
 
 	// Build up a slice of strings with all Subject Alternate Name values
-	sanValues := append(cert.DNSNames, cert.EmailAddresses...)
+	sanValues := slices.Concat(cert.DNSNames, cert.EmailAddresses)
 
 	for _, ip := range cert.IPAddresses {
 		sanValues = append(sanValues, ip.String())

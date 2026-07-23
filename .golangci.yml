@@ -6,6 +6,13 @@ linters:
     - misspell
     - modernize
     - revive
+    # Correctness linters (low-noise, no findings on the current tree).
+    - copyloopvar
+    - durationcheck
+    - gocritic
+    - makezero
+    - unconvert
+    - wastedassign
   exclusions:
     generated: strict
     presets:
@@ -23,6 +30,13 @@ linters:
       exclude-functions:
         # Used in HTTP handlers, any error is handled by the server itself.
         - (net/http.ResponseWriter).Write
+    govet:
+      enable-all: true
+      disable:
+        # Struct field ordering is not worth the churn/readability cost.
+        - fieldalignment
+        # err shadowing is idiomatic and used throughout the codebase.
+        - shadow
     revive:
       rules:
         # https://github.com/mgechev/revive/blob/master/RULES_DESCRIPTIONS.md#unused-parameter
