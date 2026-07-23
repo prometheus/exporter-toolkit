@@ -14,7 +14,6 @@
 // Package bootstrap provides a small bootstrap layer for exporters that want the
 // common exporter-toolkit web flags, logging setup, landing page wiring, and
 // listener startup behavior.
-
 package bootstrap
 
 import (

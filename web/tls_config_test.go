@@ -402,7 +402,7 @@ func TestConfigReloading(t *testing.T) {
 
 	server := &http.Server{
 		Addr: port,
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Write([]byte("Hello World!"))
 		}),
 	}
@@ -479,7 +479,7 @@ func (test *TestInputs) Test(t *testing.T) {
 	}()
 
 	server := &http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Write([]byte("Hello World!"))
 		}),
 	}
@@ -626,7 +626,7 @@ func getTLSClient(clientCertName string) *http.Client {
 					caCertPool.AppendCertsFromPEM(cert)
 					return caCertPool
 				}(),
-				GetClientCertificate: func(req *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+				GetClientCertificate: func(_ *tls.CertificateRequestInfo) (*tls.Certificate, error) {
 					return &clientCertficate, nil
 				},
 			},

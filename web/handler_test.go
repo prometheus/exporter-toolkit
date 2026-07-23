@@ -26,7 +26,7 @@ import (
 // protected endpoint multiple times.
 func TestBasicAuthCache(t *testing.T) {
 	server := &http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Write([]byte("Hello World!"))
 		}),
 	}
@@ -93,7 +93,7 @@ func TestBasicAuthCache(t *testing.T) {
 // to prevent user enumeration.
 func TestBasicAuthWithFakepassword(t *testing.T) {
 	server := &http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Write([]byte("Hello World!"))
 		}),
 	}
@@ -143,7 +143,7 @@ func TestBasicAuthWithFakepassword(t *testing.T) {
 // TestByPassBasicAuthVuln tests for CVE-2022-46146.
 func TestByPassBasicAuthVuln(t *testing.T) {
 	server := &http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Write([]byte("Hello World!"))
 		}),
 	}
@@ -193,7 +193,7 @@ func TestByPassBasicAuthVuln(t *testing.T) {
 // TestHTTPHeaders validates that HTTP headers are added correctly.
 func TestHTTPHeaders(t *testing.T) {
 	server := &http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Write([]byte("Hello World!"))
 		}),
 	}
