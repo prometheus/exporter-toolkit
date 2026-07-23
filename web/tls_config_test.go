@@ -712,3 +712,48 @@ func TestUsers(t *testing.T) {
 		t.Run(testInputs.Name, testInputs.Test)
 	}
 }
+
+func TestTLSConfigIsEnabled(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		config   TLSConfig
+		expected bool
+	}{
+		{
+			name:     "empty config",
+			config:   TLSConfig{},
+			expected: false,
+		},
+		{
+			name:     "only non-enabling fields set",
+			config:   TLSConfig{MinVersion: tls.VersionTLS12, PreferServerCipherSuites: true},
+			expected: false,
+		},
+		{
+			name:     "cert_file and key_file set",
+			config:   TLSConfig{TLSCertPath: "server.crt", TLSKeyPath: "server.key"},
+			expected: true,
+		},
+		{
+			name:     "inline cert and key set",
+			config:   TLSConfig{TLSCert: "cert", TLSKey: "key"},
+			expected: true,
+		},
+		{
+			name:     "only client CA file set",
+			config:   TLSConfig{ClientCAs: "client_ca.crt"},
+			expected: true,
+		},
+		{
+			name:     "only client auth type set",
+			config:   TLSConfig{ClientAuth: "RequireAndVerifyClientCert"},
+			expected: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.config.IsEnabled(); got != tc.expected {
+				t.Errorf("IsEnabled() = %v, expected %v", got, tc.expected)
+			}
+		})
+	}
+}

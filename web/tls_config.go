@@ -90,6 +90,18 @@ func (c *FlagConfig) checkFlags() error {
 	return nil
 }
 
+// IsEnabled reports whether the TLSConfig configures TLS, i.e. whether at least
+// one TLS-related field is set. It does not validate that the configuration is
+// complete or that the referenced files exist; use ConfigToTLSConfig for that.
+// This is useful for callers that need to know whether the server will serve
+// HTTPS, for example to infer the scheme of an external URL.
+func (t *TLSConfig) IsEnabled() bool {
+	return t.TLSCertPath != "" || t.TLSCert != "" ||
+		t.TLSKeyPath != "" || t.TLSKey != "" ||
+		t.ClientCAs != "" || t.ClientCAsText != "" ||
+		t.ClientAuth != ""
+}
+
 // SetDirectory joins any relative file paths with dir.
 func (t *TLSConfig) SetDirectory(dir string) {
 	t.TLSCertPath = config_util.JoinDir(dir, t.TLSCertPath)
@@ -165,10 +177,7 @@ func getTLSConfig(configPath string) (*tls.Config, error) {
 }
 
 func validateTLSPaths(c *TLSConfig) error {
-	if c.TLSCertPath == "" && c.TLSCert == "" &&
-		c.TLSKeyPath == "" && c.TLSKey == "" &&
-		c.ClientCAs == "" && c.ClientCAsText == "" &&
-		c.ClientAuth == "" {
+	if !c.IsEnabled() {
 		return errNoTLSConfig
 	}
 
