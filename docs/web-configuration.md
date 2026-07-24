@@ -86,7 +86,7 @@ tls_server_config:
   # the order of elements in cipher_suites, is used.
   [ prefer_server_cipher_suites: <bool> | default = true ]
 
-  # Elliptic curves that will be used in an ECDHE handshake, in preference
+  # Elliptic curves and key exchange mechanisms that will be used in a TLS handshake, in preference
   # order. Available curves are documented in the go documentation:
   # https://golang.org/pkg/crypto/tls/#CurveID
   [ curve_preferences:
