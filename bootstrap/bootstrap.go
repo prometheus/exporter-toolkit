@@ -59,6 +59,26 @@ type Bootstrap struct {
 	DisableExporterMetrics bool
 	// MaxRequests is the parsed value of --web.max-requests.
 	MaxRequests int
+
+	routes []route
+}
+
+// route is an additional handler registered next to the metrics endpoint.
+type route struct {
+	pattern string
+	handler http.Handler
+}
+
+// Handle registers an additional handler on the exporter mux. Handlers
+// registered from a MetricsHandlerFactory are served alongside the metrics
+// endpoint and the landing page.
+func (b *Bootstrap) Handle(pattern string, handler http.Handler) {
+	b.routes = append(b.routes, route{pattern: pattern, handler: handler})
+}
+
+// HandleFunc registers an additional handler function on the exporter mux.
+func (b *Bootstrap) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
+	b.Handle(pattern, http.HandlerFunc(handler))
 }
 
 // Config defines the generic exporter bootstrap inputs.
@@ -72,6 +92,9 @@ type Config struct {
 	Description string
 	// DefaultAddress is the default value for --web.listen-address.
 	DefaultAddress string
+	// MetricsPathEnvar is an optional environment variable that overrides the
+	// default value of --web.telemetry-path.
+	MetricsPathEnvar string
 	// Logger is the logger to use. When nil, toolkit configures promslog flags
 	// and builds a logger during Parse.
 	Logger *slog.Logger
@@ -110,11 +133,26 @@ type Runner struct {
 	MetricsHandler http.Handler
 	// MetricsHandlerFactory is the configured deferred metrics handler builder.
 	MetricsHandlerFactory MetricsHandlerFactory
+
+	bootstrap *Bootstrap
 }
 
 // addFlags adds the common exporter web flags to a Kingpin application.
 func addFlags(a *kingpin.Application, defaultAddress string) *web.FlagConfig {
 	return kingpinflag.AddFlags(a, defaultAddress)
+}
+
+// metricsPathFlag registers the metrics path flag, optionally backed by an
+// exporter-specific environment variable.
+func metricsPathFlag(a *kingpin.Application, envar string) *string {
+	f := a.Flag(
+		"web.telemetry-path",
+		"Path under which to expose metrics.",
+	).Default("/metrics")
+	if envar != "" {
+		f = f.Envar(envar)
+	}
+	return f.String()
 }
 
 // New creates a generic exporter bootstrap instance.
@@ -132,10 +170,7 @@ func New(c Config) *Runner {
 		MetricsHandler:        c.MetricsHandler,
 		MetricsHandlerFactory: c.MetricsHandlerFactory,
 		FlagConfig:            addFlags(app, c.DefaultAddress),
-		metricsPath: app.Flag(
-			"web.telemetry-path",
-			"Path under which to expose metrics.",
-		).Default("/metrics").String(),
+		metricsPath:           metricsPathFlag(app, c.MetricsPathEnvar),
 		disableExporterMetrics: app.Flag(
 			"web.disable-exporter-metrics",
 			"Exclude metrics about the exporter itself (promhttp_*, process_*, go_*).",
@@ -220,13 +255,14 @@ func (t *Runner) resolveMetricsHandler() (http.Handler, error) {
 		return nil, errMultipleMetricsSource
 	}
 	if t.MetricsHandlerFactory != nil {
-		return t.MetricsHandlerFactory(&Bootstrap{
+		t.bootstrap = &Bootstrap{
 			Logger:                 t.Logger,
 			MetricsPath:            t.MetricsPath,
 			FlagConfig:             t.FlagConfig,
 			DisableExporterMetrics: t.DisableExporterMetrics,
 			MaxRequests:            t.MaxRequests,
-		})
+		}
+		return t.MetricsHandlerFactory(t.bootstrap)
 	}
 	return t.MetricsHandler, nil
 }
@@ -235,6 +271,12 @@ func (t *Runner) newServer(metricsHandler http.Handler) (*http.Server, error) {
 	mux := http.NewServeMux()
 	metricsPath := t.MetricsPath
 	mux.Handle(metricsPath, metricsHandler)
+
+	if t.bootstrap != nil {
+		for _, r := range t.bootstrap.routes {
+			mux.Handle(r.pattern, r.handler)
+		}
+	}
 
 	if metricsPath != "/" {
 		landingConfig := t.LandingConfig

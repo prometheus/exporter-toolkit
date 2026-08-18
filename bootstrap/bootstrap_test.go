@@ -129,3 +129,60 @@ func TestNewServerRegistersMetricsAndLandingPage(t *testing.T) {
 		t.Fatalf("unexpected landing body: %q", body)
 	}
 }
+
+func TestNewServerRegistersFactoryRoutes(t *testing.T) {
+	tk := New(Config{
+		App:            kingpin.New("test", ""),
+		Name:           "test_exporter",
+		DefaultAddress: ":9100",
+		Logger:         promslog.NewNopLogger(),
+		MetricsHandlerFactory: func(b *Bootstrap) (http.Handler, error) {
+			b.HandleFunc("/probe", func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte("probe body"))
+			})
+			return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte("metrics body"))
+			}), nil
+		},
+	})
+
+	if err := tk.parse([]string{"--web.listen-address=:9100"}); err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+	handler, err := tk.resolveMetricsHandler()
+	if err != nil {
+		t.Fatalf("unexpected handler resolution error: %v", err)
+	}
+	server, err := tk.newServer(handler)
+	if err != nil {
+		t.Fatalf("unexpected server creation error: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	server.Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/probe", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected probe status: got %d, want %d", rec.Code, http.StatusOK)
+	}
+	if body := rec.Body.String(); body != "probe body" {
+		t.Fatalf("unexpected probe body: got %q", body)
+	}
+}
+
+func TestMetricsPathEnvarOverridesDefault(t *testing.T) {
+	t.Setenv("TEST_EXPORTER_WEB_TELEMETRY_PATH", "/envar-metrics")
+
+	tk := New(Config{
+		App:              kingpin.New("test", ""),
+		DefaultAddress:   ":9100",
+		Logger:           promslog.NewNopLogger(),
+		MetricsPathEnvar: "TEST_EXPORTER_WEB_TELEMETRY_PATH",
+		MetricsHandler:   http.NotFoundHandler(),
+	})
+
+	if err := tk.parse([]string{"--web.listen-address=:9100"}); err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+	if tk.MetricsPath != "/envar-metrics" {
+		t.Fatalf("unexpected metrics path: got %q, want %q", tk.MetricsPath, "/envar-metrics")
+	}
+}
