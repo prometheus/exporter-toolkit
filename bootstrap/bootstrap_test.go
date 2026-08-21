@@ -167,22 +167,3 @@ func TestNewServerRegistersFactoryRoutes(t *testing.T) {
 		t.Fatalf("unexpected probe body: got %q", body)
 	}
 }
-
-func TestMetricsPathEnvarOverridesDefault(t *testing.T) {
-	t.Setenv("TEST_EXPORTER_WEB_TELEMETRY_PATH", "/envar-metrics")
-
-	tk := New(Config{
-		App:              kingpin.New("test", ""),
-		DefaultAddress:   ":9100",
-		Logger:           promslog.NewNopLogger(),
-		MetricsPathEnvar: "TEST_EXPORTER_WEB_TELEMETRY_PATH",
-		MetricsHandler:   http.NotFoundHandler(),
-	})
-
-	if err := tk.parse([]string{"--web.listen-address=:9100"}); err != nil {
-		t.Fatalf("unexpected parse error: %v", err)
-	}
-	if tk.MetricsPath != "/envar-metrics" {
-		t.Fatalf("unexpected metrics path: got %q, want %q", tk.MetricsPath, "/envar-metrics")
-	}
-}

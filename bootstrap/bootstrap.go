@@ -92,9 +92,6 @@ type Config struct {
 	Description string
 	// DefaultAddress is the default value for --web.listen-address.
 	DefaultAddress string
-	// MetricsPathEnvar is an optional environment variable that overrides the
-	// default value of --web.telemetry-path.
-	MetricsPathEnvar string
 	// Logger is the logger to use. When nil, toolkit configures promslog flags
 	// and builds a logger during Parse.
 	Logger *slog.Logger
@@ -142,17 +139,12 @@ func addFlags(a *kingpin.Application, defaultAddress string) *web.FlagConfig {
 	return kingpinflag.AddFlags(a, defaultAddress)
 }
 
-// metricsPathFlag registers the metrics path flag, optionally backed by an
-// exporter-specific environment variable.
-func metricsPathFlag(a *kingpin.Application, envar string) *string {
-	f := a.Flag(
+// metricsPathFlag registers the metrics path flag.
+func metricsPathFlag(a *kingpin.Application) *string {
+	return a.Flag(
 		"web.telemetry-path",
 		"Path under which to expose metrics.",
-	).Default("/metrics")
-	if envar != "" {
-		f = f.Envar(envar)
-	}
-	return f.String()
+	).Default("/metrics").String()
 }
 
 // New creates a generic exporter bootstrap instance.
@@ -170,7 +162,7 @@ func New(c Config) *Runner {
 		MetricsHandler:        c.MetricsHandler,
 		MetricsHandlerFactory: c.MetricsHandlerFactory,
 		FlagConfig:            addFlags(app, c.DefaultAddress),
-		metricsPath:           metricsPathFlag(app, c.MetricsPathEnvar),
+		metricsPath:           metricsPathFlag(app),
 		disableExporterMetrics: app.Flag(
 			"web.disable-exporter-metrics",
 			"Exclude metrics about the exporter itself (promhttp_*, process_*, go_*).",
