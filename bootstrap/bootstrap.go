@@ -139,14 +139,6 @@ func addFlags(a *kingpin.Application, defaultAddress string) *web.FlagConfig {
 	return kingpinflag.AddFlags(a, defaultAddress)
 }
 
-// metricsPathFlag registers the metrics path flag.
-func metricsPathFlag(a *kingpin.Application) *string {
-	return a.Flag(
-		"web.telemetry-path",
-		"Path under which to expose metrics.",
-	).Default("/metrics").String()
-}
-
 // New creates a generic exporter bootstrap instance.
 func New(c Config) *Runner {
 	app := c.App
@@ -162,7 +154,10 @@ func New(c Config) *Runner {
 		MetricsHandler:        c.MetricsHandler,
 		MetricsHandlerFactory: c.MetricsHandlerFactory,
 		FlagConfig:            addFlags(app, c.DefaultAddress),
-		metricsPath:           metricsPathFlag(app),
+		metricsPath: app.Flag(
+			"web.telemetry-path",
+			"Path under which to expose metrics.",
+		).Default("/metrics").String(),
 		disableExporterMetrics: app.Flag(
 			"web.disable-exporter-metrics",
 			"Exclude metrics about the exporter itself (promhttp_*, process_*, go_*).",
