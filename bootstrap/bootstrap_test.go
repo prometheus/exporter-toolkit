@@ -14,6 +14,7 @@
 package bootstrap
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -165,5 +166,40 @@ func TestNewServerRegistersFactoryRoutes(t *testing.T) {
 	}
 	if body := rec.Body.String(); body != "probe body" {
 		t.Fatalf("unexpected probe body: got %q", body)
+	}
+}
+
+func TestNewServerRejectsProtectedRoutePatterns(t *testing.T) {
+	cases := []struct {
+		name    string
+		pattern string
+	}{
+		{name: "metrics path", pattern: "/metrics"},
+		{name: "root path", pattern: "/"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tk := New(Config{
+				App:            kingpin.New("test", ""),
+				DefaultAddress: ":9100",
+				Logger:         promslog.NewNopLogger(),
+				MetricsHandlerFactory: func(b *Bootstrap) (http.Handler, error) {
+					b.HandleFunc(tc.pattern, func(http.ResponseWriter, *http.Request) {})
+					return http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), nil
+				},
+			})
+
+			if err := tk.parse([]string{"--web.listen-address=:9100"}); err != nil {
+				t.Fatalf("unexpected parse error: %v", err)
+			}
+			handler, err := tk.resolveMetricsHandler()
+			if err != nil {
+				t.Fatalf("unexpected handler resolution error: %v", err)
+			}
+			if _, err := tk.newServer(handler); !errors.Is(err, errProtectedRoutePattern) {
+				t.Fatalf("unexpected error: got %v, want %v", err, errProtectedRoutePattern)
+			}
+		})
 	}
 }

@@ -18,6 +18,7 @@ package bootstrap
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -40,6 +41,9 @@ var (
 	errEmptyMetricsPath = errors.New("metrics path must not be empty")
 	// errNegativeMaxRequests is returned when max requests is configured below zero.
 	errNegativeMaxRequests = errors.New("web max requests must be greater than or equal to zero")
+	// errProtectedRoutePattern is returned when a caller-registered route
+	// conflicts with a path bootstrap manages itself.
+	errProtectedRoutePattern = errors.New("route pattern is reserved by bootstrap")
 )
 
 // MetricsHandlerFactory builds an exporter-specific metrics handler after the
@@ -260,7 +264,11 @@ func (t *Runner) newServer(metricsHandler http.Handler) (*http.Server, error) {
 	mux.Handle(metricsPath, metricsHandler)
 
 	if t.bootstrap != nil {
+		protected := map[string]bool{metricsPath: true, "/": true}
 		for _, r := range t.bootstrap.routes {
+			if protected[r.pattern] {
+				return nil, fmt.Errorf("%w: %q", errProtectedRoutePattern, r.pattern)
+			}
 			mux.Handle(r.pattern, r.handler)
 		}
 	}
