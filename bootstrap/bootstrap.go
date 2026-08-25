@@ -18,6 +18,7 @@ package bootstrap
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -41,6 +42,10 @@ var (
 	errEmptyMetricsPath = errors.New("metrics path must not be empty")
 	// errNegativeMaxRequests is returned when max requests is configured below zero.
 	errNegativeMaxRequests = errors.New("web max requests must be greater than or equal to zero")
+	// errReservedMetricsPath is returned when a caller-registered route
+	// conflicts with --web.telemetry-path. The root path may be overridden
+	// by a caller-registered route, but the metrics path may not.
+	errReservedMetricsPath = errors.New("route pattern is reserved for the metrics handler")
 )
 
 // defaultReadHeaderTimeout applies when Config.ReadHeaderTimeout is left unset.
@@ -63,6 +68,26 @@ type Bootstrap struct {
 	DisableExporterMetrics bool
 	// MaxRequests is the parsed value of --web.max-requests.
 	MaxRequests int
+
+	routes []route
+}
+
+// route is an additional handler registered next to the metrics endpoint.
+type route struct {
+	pattern string
+	handler http.Handler
+}
+
+// Handle registers an additional handler on the exporter mux. Handlers
+// registered from a MetricsHandlerFactory are served alongside the metrics
+// endpoint and the landing page.
+func (b *Bootstrap) Handle(pattern string, handler http.Handler) {
+	b.routes = append(b.routes, route{pattern: pattern, handler: handler})
+}
+
+// HandleFunc registers an additional handler function on the exporter mux.
+func (b *Bootstrap) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
+	b.Handle(pattern, http.HandlerFunc(handler))
 }
 
 // Config defines the generic exporter bootstrap inputs.
@@ -117,6 +142,8 @@ type Runner struct {
 	MetricsHandler http.Handler
 	// MetricsHandlerFactory is the configured deferred metrics handler builder.
 	MetricsHandlerFactory MetricsHandlerFactory
+
+	bootstrap *Bootstrap
 }
 
 // addFlags adds the common exporter web flags to a Kingpin application.
@@ -227,13 +254,14 @@ func (t *Runner) resolveMetricsHandler() (http.Handler, error) {
 		return nil, errMultipleMetricsSource
 	}
 	if t.MetricsHandlerFactory != nil {
-		return t.MetricsHandlerFactory(&Bootstrap{
+		t.bootstrap = &Bootstrap{
 			Logger:                 t.Logger,
 			MetricsPath:            t.MetricsPath,
 			FlagConfig:             t.FlagConfig,
 			DisableExporterMetrics: t.DisableExporterMetrics,
 			MaxRequests:            t.MaxRequests,
-		})
+		}
+		return t.MetricsHandlerFactory(t.bootstrap)
 	}
 	return t.MetricsHandler, nil
 }
@@ -243,7 +271,20 @@ func (t *Runner) newServer(metricsHandler http.Handler) (*http.Server, error) {
 	metricsPath := t.MetricsPath
 	mux.Handle(metricsPath, metricsHandler)
 
-	if metricsPath != "/" {
+	rootOverridden := false
+	if t.bootstrap != nil {
+		for _, r := range t.bootstrap.routes {
+			if r.pattern == metricsPath {
+				return nil, fmt.Errorf("%w: %q", errReservedMetricsPath, r.pattern)
+			}
+			if r.pattern == "/" {
+				rootOverridden = true
+			}
+			mux.Handle(r.pattern, r.handler)
+		}
+	}
+
+	if metricsPath != "/" && !rootOverridden {
 		landingConfig := t.LandingConfig
 		landingConfig.Links = append(landingConfig.Links, web.LandingLinks{
 			Address: metricsPath,

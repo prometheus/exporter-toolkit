@@ -14,6 +14,7 @@
 package bootstrap
 
 import (
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -129,6 +130,102 @@ func TestNewServerRegistersMetricsAndLandingPage(t *testing.T) {
 	}
 	if body := landingRec.Body.String(); body == "" || !strings.Contains(body, "Metrics") || !strings.Contains(body, "test description") {
 		t.Fatalf("unexpected landing body: %q", body)
+	}
+}
+
+func TestNewServerRegistersFactoryRoutes(t *testing.T) {
+	tk := New(Config{
+		App:            kingpin.New("test", ""),
+		Name:           "test_exporter",
+		DefaultAddress: ":9100",
+		Logger:         promslog.NewNopLogger(),
+		MetricsHandlerFactory: func(b *Bootstrap) (http.Handler, error) {
+			b.HandleFunc("/probe", func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte("probe body"))
+			})
+			return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte("metrics body"))
+			}), nil
+		},
+	})
+
+	if err := tk.parse([]string{"--web.listen-address=:9100"}); err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+	handler, err := tk.resolveMetricsHandler()
+	if err != nil {
+		t.Fatalf("unexpected handler resolution error: %v", err)
+	}
+	server, err := tk.newServer(handler)
+	if err != nil {
+		t.Fatalf("unexpected server creation error: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	server.Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/probe", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected probe status: got %d, want %d", rec.Code, http.StatusOK)
+	}
+	if body := rec.Body.String(); body != "probe body" {
+		t.Fatalf("unexpected probe body: got %q", body)
+	}
+}
+
+func TestNewServerRejectsMetricsPathOverride(t *testing.T) {
+	tk := New(Config{
+		App:            kingpin.New("test", ""),
+		DefaultAddress: ":9100",
+		Logger:         promslog.NewNopLogger(),
+		MetricsHandlerFactory: func(b *Bootstrap) (http.Handler, error) {
+			b.HandleFunc("/metrics", func(http.ResponseWriter, *http.Request) {})
+			return http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), nil
+		},
+	})
+
+	if err := tk.parse([]string{"--web.listen-address=:9100"}); err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+	handler, err := tk.resolveMetricsHandler()
+	if err != nil {
+		t.Fatalf("unexpected handler resolution error: %v", err)
+	}
+	if _, err := tk.newServer(handler); !errors.Is(err, errReservedMetricsPath) {
+		t.Fatalf("unexpected error: got %v, want %v", err, errReservedMetricsPath)
+	}
+}
+
+func TestNewServerAllowsRootRouteOverride(t *testing.T) {
+	tk := New(Config{
+		App:            kingpin.New("test", ""),
+		DefaultAddress: ":9100",
+		Logger:         promslog.NewNopLogger(),
+		MetricsHandlerFactory: func(b *Bootstrap) (http.Handler, error) {
+			b.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte("custom root"))
+			})
+			return http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), nil
+		},
+	})
+
+	if err := tk.parse([]string{"--web.listen-address=:9100"}); err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+	handler, err := tk.resolveMetricsHandler()
+	if err != nil {
+		t.Fatalf("unexpected handler resolution error: %v", err)
+	}
+	server, err := tk.newServer(handler)
+	if err != nil {
+		t.Fatalf("unexpected server creation error: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	server.Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected root status: got %d, want %d", rec.Code, http.StatusOK)
+	}
+	if body := rec.Body.String(); body != "custom root" {
+		t.Fatalf("unexpected root body: got %q, want the caller's override to take precedence over the landing page", body)
 	}
 }
 
