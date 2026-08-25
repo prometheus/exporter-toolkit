@@ -41,9 +41,10 @@ var (
 	errEmptyMetricsPath = errors.New("metrics path must not be empty")
 	// errNegativeMaxRequests is returned when max requests is configured below zero.
 	errNegativeMaxRequests = errors.New("web max requests must be greater than or equal to zero")
-	// errProtectedRoutePattern is returned when a caller-registered route
-	// conflicts with a path bootstrap manages itself.
-	errProtectedRoutePattern = errors.New("route pattern is reserved by bootstrap")
+	// errReservedMetricsPath is returned when a caller-registered route
+	// conflicts with --web.telemetry-path. The root path may be overridden
+	// by a caller-registered route, but the metrics path may not.
+	errReservedMetricsPath = errors.New("route pattern is reserved for the metrics handler")
 )
 
 // MetricsHandlerFactory builds an exporter-specific metrics handler after the
@@ -263,17 +264,20 @@ func (t *Runner) newServer(metricsHandler http.Handler) (*http.Server, error) {
 	metricsPath := t.MetricsPath
 	mux.Handle(metricsPath, metricsHandler)
 
+	rootOverridden := false
 	if t.bootstrap != nil {
-		protected := map[string]bool{metricsPath: true, "/": true}
 		for _, r := range t.bootstrap.routes {
-			if protected[r.pattern] {
-				return nil, fmt.Errorf("%w: %q", errProtectedRoutePattern, r.pattern)
+			if r.pattern == metricsPath {
+				return nil, fmt.Errorf("%w: %q", errReservedMetricsPath, r.pattern)
+			}
+			if r.pattern == "/" {
+				rootOverridden = true
 			}
 			mux.Handle(r.pattern, r.handler)
 		}
 	}
 
-	if metricsPath != "/" {
+	if metricsPath != "/" && !rootOverridden {
 		landingConfig := t.LandingConfig
 		landingConfig.Links = append(landingConfig.Links, web.LandingLinks{
 			Address: metricsPath,
