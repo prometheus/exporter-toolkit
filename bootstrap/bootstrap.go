@@ -22,6 +22,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/prometheus/common/promslog"
@@ -46,6 +47,9 @@ var (
 	// by a caller-registered route, but the metrics path may not.
 	errReservedMetricsPath = errors.New("route pattern is reserved for the metrics handler")
 )
+
+// defaultReadHeaderTimeout applies when Config.ReadHeaderTimeout is left unset.
+const defaultReadHeaderTimeout = time.Minute
 
 // MetricsHandlerFactory builds an exporter-specific metrics handler after the
 // common toolkit flags have been parsed.
@@ -106,6 +110,9 @@ type Config struct {
 	MetricsHandler http.Handler
 	// MetricsHandlerFactory builds the metrics handler after flags are parsed.
 	MetricsHandlerFactory MetricsHandlerFactory
+	// ReadHeaderTimeout bounds request-header reads, mitigating Slowloris
+	// (gosec G112). Non-positive values select the one-minute default.
+	ReadHeaderTimeout time.Duration
 }
 
 // Runner manages generic exporter startup around flag parsing, landing page
@@ -290,7 +297,15 @@ func (t *Runner) newServer(metricsHandler http.Handler) (*http.Server, error) {
 		mux.Handle("/", landingPage)
 	}
 
-	return &http.Server{Handler: mux}, nil
+	readHeaderTimeout := defaultReadHeaderTimeout
+	if t.provided.ReadHeaderTimeout > 0 {
+		readHeaderTimeout = t.provided.ReadHeaderTimeout
+	}
+
+	return &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: readHeaderTimeout,
+	}, nil
 }
 
 func (t *Runner) defaultLandingConfig() web.LandingConfig {
