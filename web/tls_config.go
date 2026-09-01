@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-systemd/v22/activation"
+	"github.com/coreos/go-systemd/v22/daemon"
 	"github.com/mdlayher/vsock"
 	config_util "github.com/prometheus/common/config"
 	"go.yaml.in/yaml/v2"
@@ -302,6 +303,7 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 // ServeMultiple starts the server on the given listeners. The FlagConfig is
 // also passed on to Serve.
 func ServeMultiple(listeners []net.Listener, server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
+	_, _ = daemon.SdNotify(false, daemon.SdNotifyReady)
 	errs := new(errgroup.Group)
 	for _, l := range listeners {
 		errs.Go(func() error {
