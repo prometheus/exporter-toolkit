@@ -26,5 +26,5 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-      - uses: prometheus/promci-setup@3e5cd31b34b8ae19efa8f071c5e3cdb44884a7f8 # v0.2.1
+      - uses: prometheus/promci-setup@55bd31fe92710532260eb57c554f2697363285c5 # v0.2.2
       - run: make test
