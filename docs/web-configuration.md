@@ -80,10 +80,13 @@ tls_server_config:
   [ cipher_suites:
     [ - <string> ] ]
 
-  # prefer_server_cipher_suites controls whether the server selects the
-  # client's most preferred ciphersuite, or the server's most preferred
-  # ciphersuite. If true then the server's preference, as expressed in
-  # the order of elements in cipher_suites, is used.
+  # Deprecated: this setting is accepted and ignored.
+  #
+  # It used to control whether the server followed its own cipher suite
+  # preference, as expressed in the order of elements in cipher_suites, or the
+  # client's. Go has selected the cipher suite itself since Go 1.17, taking
+  # into account inferred client hardware, server hardware and security, and
+  # the underlying setting has had no effect since then.
   [ prefer_server_cipher_suites: <bool> | default = true ]
 
   # Elliptic curves that will be used in an ECDHE handshake, in preference
