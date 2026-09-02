@@ -81,14 +81,21 @@ type FlagConfig struct {
 	WebConfigFile *string
 }
 
+// checkWebConfigFlag validates that the flag configuration contains the web
+// config field. Serve and ServeMultiple only need this much, because their
+// caller supplies the listeners.
+func (c *FlagConfig) checkWebConfigFlag() error {
+	if c == nil || c.WebConfigFile == nil {
+		return ErrMissingFlag
+	}
+	return nil
+}
+
 // checkFlags validates that the flag configuration contains the required
 // listener and web config fields needed by the web package.
 func (c *FlagConfig) checkFlags() error {
-	if c == nil {
-		return ErrMissingFlag
-	}
-	if c.WebConfigFile == nil {
-		return ErrMissingFlag
+	if err := c.checkWebConfigFlag(); err != nil {
+		return err
 	}
 	// Listen addresses are only optional when systemd socket activation is
 	// actually enabled. Checking that WebSystemdSocket is non-nil is not
@@ -413,6 +420,9 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 }
 
 func configureServer(server *http.Server, flags *FlagConfig, logger *slog.Logger) (*HTTPConfig, error) {
+	if err := flags.checkWebConfigFlag(); err != nil {
+		return nil, err
+	}
 	setErrorLog(server, logger)
 	tlsConfigPath := *flags.WebConfigFile
 	if tlsConfigPath == "" {
