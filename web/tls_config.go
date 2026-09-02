@@ -75,14 +75,24 @@ type FlagConfig struct {
 	WebConfigFile *string
 }
 
-// checkFlags validates that the flag configuration contains the required
-// listener and web config fields needed by the web package.
-func (c *FlagConfig) checkFlags() error {
+// checkWebConfigFlag validates the fields needed to apply the web
+// configuration. It deliberately does not require the listener fields, because
+// Serve and ServeMultiple are handed their listeners by the caller.
+func (c *FlagConfig) checkWebConfigFlag() error {
 	if c == nil {
 		return ErrMissingFlag
 	}
 	if c.WebConfigFile == nil {
 		return ErrMissingFlag
+	}
+	return nil
+}
+
+// checkFlags validates that the flag configuration contains the required
+// listener and web config fields needed by the web package.
+func (c *FlagConfig) checkFlags() error {
+	if err := c.checkWebConfigFlag(); err != nil {
+		return err
 	}
 	if c.WebSystemdSocket == nil && (c.WebListenAddresses == nil || len(*c.WebListenAddresses) == 0) {
 		return ErrNoListeners
@@ -302,6 +312,9 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 // ServeMultiple starts the server on the given listeners. The FlagConfig is
 // also passed on to Serve.
 func ServeMultiple(listeners []net.Listener, server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
+	if err := flags.checkWebConfigFlag(); err != nil {
+		return err
+	}
 	errs := new(errgroup.Group)
 	for _, l := range listeners {
 		errs.Go(func() error {
@@ -378,6 +391,9 @@ func parseVsockPort(address string) (uint32, error) {
 // Server starts the server on the given listener. Based on the file path
 // WebConfigFile in the FlagConfig, TLS or basic auth could be enabled.
 func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
+	if err := flags.checkWebConfigFlag(); err != nil {
+		return err
+	}
 	logger.Info("Listening on", "address", l.Addr().String())
 	tlsConfigPath := *flags.WebConfigFile
 	if tlsConfigPath == "" {
