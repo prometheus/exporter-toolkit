@@ -258,17 +258,22 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 		cfg.CurvePreferences = cp
 	}
 
+	// clientCAsEmpty records that a client CA was configured but held no
+	// usable certificate. It is reported after the client auth policy has been
+	// validated, so that a configuration carrying both faults keeps reporting
+	// the policy one.
+	clientCAsEmpty := false
 	if c.ClientCAs != "" {
 		clientCAPool := x509.NewCertPool()
 		clientCAFile, err := os.ReadFile(c.ClientCAs)
 		if err != nil {
 			return nil, err
 		}
-		clientCAPool.AppendCertsFromPEM(clientCAFile)
+		clientCAsEmpty = !clientCAPool.AppendCertsFromPEM(clientCAFile)
 		cfg.ClientCAs = clientCAPool
 	} else if c.ClientCAsText != "" {
 		clientCAPool := x509.NewCertPool()
-		clientCAPool.AppendCertsFromPEM([]byte(c.ClientCAsText))
+		clientCAsEmpty = !clientCAPool.AppendCertsFromPEM([]byte(c.ClientCAsText))
 		cfg.ClientCAs = clientCAPool
 	}
 
@@ -294,6 +299,13 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 
 	if (c.ClientCAs != "" || c.ClientCAsText != "") && cfg.ClientAuth == tls.NoClientCert {
 		return nil, errors.New("client CA's have been configured without a Client Auth Policy")
+	}
+
+	if clientCAsEmpty {
+		if c.ClientCAs != "" {
+			return nil, fmt.Errorf("no client CA certificates found in client_ca_file (%s)", c.ClientCAs)
+		}
+		return nil, errors.New("no client CA certificates found in client_ca")
 	}
 
 	return cfg, nil
