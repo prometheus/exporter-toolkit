@@ -27,6 +27,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coreos/go-systemd/v22/activation"
@@ -147,7 +148,64 @@ type RateLimiterConfig struct {
 	Interval time.Duration `yaml:"interval"`
 }
 
+// configCache memoizes parsed configuration files. The file is consulted on
+// every request so that changes are picked up without a restart, and parsing it
+// each time is by far the most expensive part of serving one.
+//
+// An entry is reused only while the file's modification time and size are both
+// unchanged, so an edit is picked up on the next request as before. A write
+// that leaves both identical is not noticed; on filesystems whose modification
+// times have sub-second resolution that needs a rewrite within the same
+// nanosecond, and elsewhere within the same second, at exactly the same length.
+type configCache struct {
+	mtx     sync.Mutex
+	entries map[string]configCacheEntry
+}
+
+type configCacheEntry struct {
+	modTime time.Time
+	size    int64
+	config  *Config
+}
+
+var parsedConfigs = &configCache{entries: make(map[string]configCacheEntry)}
+
+// get returns the cached configuration for path if it was parsed from a file
+// with the same modification time and size.
+func (c *configCache) get(path string, info os.FileInfo) *Config {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	entry, ok := c.entries[path]
+	if !ok || entry.size != info.Size() || !entry.modTime.Equal(info.ModTime()) {
+		return nil
+	}
+	return entry.config
+}
+
+func (c *configCache) set(path string, info os.FileInfo, config *Config) {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	c.entries[path] = configCacheEntry{
+		modTime: info.ModTime(),
+		size:    info.Size(),
+		config:  config,
+	}
+}
+
 func getConfig(configPath string) (*Config, error) {
+	info, err := os.Stat(configPath)
+	if err != nil {
+		return nil, err
+	}
+	if c := parsedConfigs.get(configPath, info); c != nil {
+		// Hand out a copy so that a caller cannot change what the next one
+		// sees. The maps and slices inside are shared, and are only ever read.
+		cached := *c
+		return &cached, nil
+	}
+
 	content, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, err
@@ -165,7 +223,15 @@ func getConfig(configPath string) (*Config, error) {
 		err = validateHeaderConfig(c.HTTPConfig.Header)
 	}
 	c.TLSConfig.SetDirectory(filepath.Dir(configPath))
-	return c, err
+	if err != nil {
+		// A file that does not parse is not cached, so that the error is
+		// reported again for every request until it is fixed.
+		return c, err
+	}
+
+	parsedConfigs.set(configPath, info, c)
+	cached := *c
+	return &cached, nil
 }
 
 func getTLSConfig(configPath string) (*tls.Config, error) {
