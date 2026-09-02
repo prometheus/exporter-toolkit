@@ -111,6 +111,13 @@ func (t *TLSConfig) SetDirectory(dir string) {
 
 // VerifyPeerCertificate will check the SAN entries of the client cert if there is configuration for it
 func (t *TLSConfig) VerifyPeerCertificate(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+	// crypto/tls calls VerifyPeerCertificate with an empty slice when the
+	// client declines to send a certificate and the client auth type does not
+	// require one. Without this check the rawCerts[0] access below panics.
+	if len(rawCerts) == 0 {
+		return errors.New("client did not present a certificate to match against client_allowed_sans")
+	}
+
 	// sender cert comes first, see https://www.rfc-editor.org/rfc/rfc5246#section-7.4.2
 	cert, err := x509.ParseCertificate(rawCerts[0])
 	if err != nil {
@@ -272,11 +279,6 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 		cfg.ClientCAs = clientCAPool
 	}
 
-	if c.ClientAllowedSans != nil {
-		// verify that the client cert contains an allowed SAN
-		cfg.VerifyPeerCertificate = c.VerifyPeerCertificate
-	}
-
 	switch c.ClientAuth {
 	case "RequestClientCert":
 		cfg.ClientAuth = tls.RequestClientCert
@@ -294,6 +296,20 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 
 	if (c.ClientCAs != "" || c.ClientCAsText != "") && cfg.ClientAuth == tls.NoClientCert {
 		return nil, errors.New("client CA's have been configured without a Client Auth Policy")
+	}
+
+	if c.ClientAllowedSans != nil {
+		// SAN matching is only meaningful when the client is required to
+		// present a certificate. With NoClientCert the server never asks for
+		// one, so VerifyPeerCertificate is never called and the configured
+		// SANs would be silently ignored. With RequestClientCert or
+		// VerifyClientCertIfGiven a client may decline to send a certificate,
+		// leaving nothing to match against.
+		if cfg.ClientAuth != tls.RequireAnyClientCert && cfg.ClientAuth != tls.RequireAndVerifyClientCert {
+			return nil, errors.New("client_allowed_sans requires client_auth_type to be one of RequireAnyClientCert or RequireAndVerifyClientCert")
+		}
+		// verify that the client cert contains an allowed SAN
+		cfg.VerifyPeerCertificate = c.VerifyPeerCertificate
 	}
 
 	return cfg, nil
