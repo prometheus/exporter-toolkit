@@ -95,14 +95,16 @@ func (u *webHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Configure http headers. This happens before any request is turned away,
+	// so that the configured headers are present on every response and not
+	// only on the ones that reach the wrapped handler.
+	for k, v := range c.HTTPConfig.Header {
+		w.Header().Set(k, v)
+	}
+
 	if u.limiter != nil && !u.limiter.Allow() {
 		http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
 		return
-	}
-
-	// Configure http headers.
-	for k, v := range c.HTTPConfig.Header {
-		w.Header().Set(k, v)
 	}
 
 	if len(c.Users) == 0 {
