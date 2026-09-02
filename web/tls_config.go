@@ -34,7 +34,6 @@ import (
 	config_util "github.com/prometheus/common/config"
 	"go.yaml.in/yaml/v2"
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/time/rate"
 )
 
 var (
@@ -400,19 +399,16 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 		return err
 	}
 
-	var limiter *rate.Limiter
-	if c.RateLimiterConfig.Interval != 0 {
-		limiter = rate.NewLimiter(rate.Every(c.RateLimiterConfig.Interval), c.RateLimiterConfig.Burst)
-		logger.Info("Rate Limiter is enabled.", "burst", c.RateLimiterConfig.Burst, "interval", c.RateLimiterConfig.Interval)
-	}
-
-	server.Handler = &webHandler{
+	webHandler := &webHandler{
 		tlsConfigPath: tlsConfigPath,
 		logger:        logger,
 		handler:       handler,
 		cache:         newCache(),
-		limiter:       limiter,
 	}
+	// Build the limiter up front so that an enabled rate limiter is reported at
+	// startup as before. The handler rebuilds it whenever the file changes.
+	webHandler.rateLimiter(c.RateLimiterConfig)
+	server.Handler = webHandler
 
 	config, err := ConfigToTLSConfig(&c.TLSConfig)
 	switch err {

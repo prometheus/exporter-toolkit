@@ -128,7 +128,9 @@ basic_auth_users:
   [ <string>: <secret> ... ]
 
 
-# Rate limiting requests on the endpoint using a token bucket
+# Rate limiting requests on the endpoint using a token bucket.
+# Changing these values takes effect without a restart, and starts the
+# interval afresh.
 rate_limit:
   interval: <duration> # time interval between two requests, set to 0 to disable rate limiter
   burst: <int> # and permits a burst of <int> requests.
