@@ -66,6 +66,10 @@ var (
 		"Certificate required": regexp.MustCompile(`certificate required`),
 		"Unknown CA":           regexp.MustCompile(`unknown certificate authority`),
 		"Too Many Requests":    regexp.MustCompile(`Too Many Requests`),
+		"SANs without required client cert": regexp.MustCompile(
+			`client_allowed_sans requires client_auth_type`),
+		"No client certificate": regexp.MustCompile(
+			`client did not present a certificate to match against client_allowed_sans`),
 	}
 )
 
@@ -186,6 +190,16 @@ func TestYAMLFiles(t *testing.T) {
 			Name:           `invalid config yml (bad TLS version)`,
 			YAMLConfigPath: "testdata/web_config_noAuth_wrongTLSVersion.bad.yml",
 			ExpectedError:  ErrorMap["Unknown TLS version"],
+		},
+		{
+			Name:           `invalid config yml (client_allowed_sans with optional client cert)`,
+			YAMLConfigPath: "testdata/web_config_auth_client_san_optional_cert.bad.yaml",
+			ExpectedError:  ErrorMap["SANs without required client cert"],
+		},
+		{
+			Name:           `invalid config yml (client_allowed_sans without client auth)`,
+			YAMLConfigPath: "testdata/web_config_auth_client_san_no_client_auth.bad.yaml",
+			ExpectedError:  ErrorMap["SANs without required client cert"],
 		},
 	}
 	for _, testInputs := range testTables {
@@ -863,4 +877,90 @@ func (b *syncBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.String()
+}
+
+// TestVerifyPeerCertificateWithoutClientCert checks that an empty rawCerts is an
+// error rather than a panic.
+func TestVerifyPeerCertificateWithoutClientCert(t *testing.T) {
+	c := &TLSConfig{ClientAllowedSans: []string{"one"}}
+
+	for _, tc := range []struct {
+		name     string
+		rawCerts [][]byte
+	}{
+		{name: "nil", rawCerts: nil},
+		{name: "empty", rawCerts: [][]byte{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := c.VerifyPeerCertificate(tc.rawCerts, nil)
+			if err == nil {
+				t.Fatal("expected an error, got nil")
+			}
+			if !ErrorMap["No client certificate"].MatchString(err.Error()) {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+// TestVerifyPeerCertificateHandshakeWithoutClientCert checks that the server
+// rejects a client that presents no certificate without panicking.
+func TestVerifyPeerCertificateHandshakeWithoutClientCert(t *testing.T) {
+	cert, err := tls.LoadX509KeyPair("testdata/server.crt", "testdata/server.key")
+	if err != nil {
+		t.Fatalf("loading server key pair: %v", err)
+	}
+
+	tlsConfig := &TLSConfig{ClientAllowedSans: []string{"one"}}
+	listener, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		// Tolerates a client that sends no certificate, leaving rawCerts empty.
+		ClientAuth:            tls.VerifyClientCertIfGiven,
+		VerifyPeerCertificate: tlsConfig.VerifyPeerCertificate,
+		MinVersion:            tls.VersionTLS12,
+	})
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+
+	type result struct {
+		err     error
+		recover any
+	}
+	results := make(chan result, 1)
+	go func() {
+		var r result
+		defer func() {
+			r.recover = recover()
+			results <- r
+		}()
+		conn, err := listener.Accept()
+		if err != nil {
+			r.err = err
+			return
+		}
+		defer conn.Close()
+		r.err = conn.(*tls.Conn).Handshake()
+	}()
+
+	// Under TLS 1.3 the dial can succeed before the server rejects the
+	// handshake, so only the server side is checked.
+	clientConfig := getTLSClient("").Transport.(*http.Transport).TLSClientConfig
+	clientConfig.ServerName = "localhost"
+	clientConn, err := tls.Dial("tcp", listener.Addr().String(), clientConfig)
+	if err == nil {
+		_ = clientConn.Close()
+	}
+
+	r := <-results
+	if r.recover != nil {
+		t.Fatalf("server panicked during the handshake: %v", r.recover)
+	}
+	if r.err == nil {
+		t.Fatal("expected the server to reject a client that sent no certificate")
+	}
+	if !ErrorMap["No client certificate"].MatchString(r.err.Error()) {
+		t.Fatalf("unexpected server error: %v", r.err)
+	}
 }
