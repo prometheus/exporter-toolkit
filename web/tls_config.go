@@ -90,8 +90,15 @@ func (c *FlagConfig) checkFlags() error {
 	if c.WebConfigFile == nil {
 		return ErrMissingFlag
 	}
-	if c.WebSystemdSocket == nil && (c.WebListenAddresses == nil || len(*c.WebListenAddresses) == 0) {
-		return ErrNoListeners
+	// Listen addresses are only optional when systemd socket activation is
+	// actually enabled. Checking that WebSystemdSocket is non-nil is not
+	// enough: kingpinflag.AddFlags always hands out a non-nil pointer, so a
+	// nil-but-false flag would otherwise pass validation and then panic on the
+	// *flags.WebListenAddresses dereference in ListenAndServe.
+	if c.WebSystemdSocket == nil || !*c.WebSystemdSocket {
+		if c.WebListenAddresses == nil || len(*c.WebListenAddresses) == 0 {
+			return ErrNoListeners
+		}
 	}
 	return nil
 }
