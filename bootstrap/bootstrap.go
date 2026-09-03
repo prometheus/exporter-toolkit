@@ -72,6 +72,28 @@ type Bootstrap struct {
 	routes []route
 }
 
+// maxRequestsHandler bounds how many requests h serves at once. Requests
+// arriving while the limit is reached are answered with 503 rather than
+// queued, so that a scrape which cannot be served fails quickly instead of
+// piling up behind the ones that are already running.
+//
+// A limit of zero or less disables the bound and h is returned unchanged.
+func maxRequestsHandler(h http.Handler, limit int) http.Handler {
+	if limit <= 0 {
+		return h
+	}
+	inFlight := make(chan struct{}, limit)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case inFlight <- struct{}{}:
+			defer func() { <-inFlight }()
+			h.ServeHTTP(w, r)
+		default:
+			http.Error(w, fmt.Sprintf("Limit of concurrent requests reached (%d), try again later.", limit), http.StatusServiceUnavailable)
+		}
+	})
+}
+
 // route is an additional handler registered next to the metrics endpoint.
 type route struct {
 	pattern string
@@ -172,11 +194,11 @@ func New(c Config) *Runner {
 		).Default("/metrics").String(),
 		disableExporterMetrics: app.Flag(
 			"web.disable-exporter-metrics",
-			"Exclude metrics about the exporter itself (promhttp_*, process_*, go_*).",
+			"Exclude metrics about the exporter itself (promhttp_*, process_*, go_*). Applied by the exporter's metrics handler, which is the only thing that knows what it collects; it is reported to a MetricsHandlerFactory as Bootstrap.DisableExporterMetrics.",
 		).Bool(),
 		maxRequests: app.Flag(
 			"web.max-requests",
-			"Maximum number of parallel scrape requests. Use 0 to disable.",
+			"Maximum number of scrape requests served in parallel. Further requests are answered with 503 until one completes. Use 0 to disable.",
 		).Default("40").Int(),
 	}
 
@@ -269,7 +291,7 @@ func (t *Runner) resolveMetricsHandler() (http.Handler, error) {
 func (t *Runner) newServer(metricsHandler http.Handler) (*http.Server, error) {
 	mux := http.NewServeMux()
 	metricsPath := t.MetricsPath
-	mux.Handle(metricsPath, metricsHandler)
+	mux.Handle(metricsPath, maxRequestsHandler(metricsHandler, t.MaxRequests))
 
 	rootOverridden := false
 	if t.bootstrap != nil {
