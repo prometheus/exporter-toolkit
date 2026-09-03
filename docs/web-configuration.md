@@ -153,8 +153,16 @@ which will look something like:
 The cost (10 in the example) influences the time it takes for computing the
 hash. A higher cost will end up slowing down the authentication process.
 Depending on the machine, a cost of 10 will take about ~70ms, whereas a cost of
-18 can take up to a few seconds. That hash will be computed on the first
+18 can take tens of seconds. That hash will be computed on the first
 authenticated HTTP request and then cached.
+
+The cost also bounds how expensive an unauthenticated request can be. A request
+naming a user that is not configured is compared against a decoy hash generated
+at the highest cost in use, so that it cannot be told apart from a request for a
+configured user by how long it takes. This means a single expensive user makes
+every rejected request that expensive too. Keep the cost the same for all users,
+pick it with that in mind, and consider configuring `rate_limit` alongside
+`basic_auth_users`.
 
 ## Performance
 
