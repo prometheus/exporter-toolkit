@@ -11,8 +11,10 @@ defined by the scheme described below.
 Brackets indicate that a parameter is optional. For non-list parameters the
 value is set to the specified default.
 
-The file is read upon every http request, such as any change in the
-configuration, so the certificates are picked up immediately.
+The file is consulted upon every http request, so any change in the
+configuration, such as the certificates, is picked up immediately. It is only
+re-read and re-parsed when its modification time or size has changed since the
+previous request.
 
 Generic placeholders are defined as follows:
 
