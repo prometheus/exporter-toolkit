@@ -103,13 +103,6 @@ func (u *webHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = ValidateWebConfig(c)
-	if err != nil {
-		u.logger.Error("Invalid web configuration", "err", err.Error())
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
-	}
-
 	// Configure http headers.
 	for k, v := range c.HTTPConfig.Header {
 		w.Header().Set(k, v)
