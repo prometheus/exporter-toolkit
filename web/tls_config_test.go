@@ -28,7 +28,7 @@ import (
 	"testing"
 	"time"
 
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v2"
 )
 
 // Helpers for literal FlagConfig
@@ -658,6 +658,105 @@ func TestConfigReloading(t *testing.T) {
 	}
 }
 
+// TestWebConfigReloading mirrors TestConfigReloading but for an injected
+// FlagConfig.WebConfig instead of a WebConfigFile. There is no file to swap, so
+// the "reload" is an in-place mutation of flags.WebConfig: Serve's
+// GetConfigForClient callback re-reads it on every new connection. The test
+// starts with a blocking client-auth policy (RequireAndVerifyClientCert), which
+// rejects a client that sends no certificate, then relaxes it to
+// VerifyClientCertIfGiven and confirms a new connection is accepted without a
+// restart.
+func TestWebConfigReloading(t *testing.T) {
+	errorChannel := make(chan error, 1)
+	var once sync.Once
+	recordConnectionError := func(err error) {
+		once.Do(func() {
+			errorChannel <- err
+		})
+	}
+	defer func() {
+		if recover() != nil {
+			recordConnectionError(errors.New("Panic in test function"))
+		}
+	}()
+
+	goodYAMLPath := "testdata/web_config_noAuth.good.yml"
+	webConfigGood, err := getConfig(goodYAMLPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	badYAMLPath := "testdata/web_config_noAuth.good.blocking.yml"
+	webConfigBad, err := getConfig(badYAMLPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	localPort := getPort()
+
+	server := &http.Server{
+		Addr: localPort,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Write([]byte("Hello World!"))
+		}),
+	}
+	defer func() {
+		server.Close()
+	}()
+
+	flags := FlagConfig{
+		WebListenAddresses: &([]string{localPort}),
+		WebSystemdSocket:   OfBool(false),
+		WebConfig:          webConfigBad,
+	}
+
+	go func() {
+		defer func() {
+			if recover() != nil {
+				recordConnectionError(errors.New("Panic starting server"))
+			}
+		}()
+		err := Listen(server, &flags, testlogger)
+		recordConnectionError(err)
+	}()
+
+	client := getTLSClient("")
+
+	TestClientConnection := func() error {
+		time.Sleep(250 * time.Millisecond)
+		r, err := client.Get("https://localhost" + localPort)
+		if err != nil {
+			return err
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			return err
+		}
+		if string(body) != "Hello World!" {
+			return errors.New(string(body))
+		}
+		return nil
+	}
+
+	err = TestClientConnection()
+	if err == nil {
+		recordConnectionError(errors.New("connection accepted but should have failed"))
+	} else {
+		flags.WebConfig = webConfigGood
+		err = TestClientConnection()
+		if err != nil {
+			recordConnectionError(errors.New("connection failed but should have been accepted"))
+		} else {
+
+			recordConnectionError(nil)
+		}
+	}
+
+	err = <-errorChannel
+	if err != nil {
+		t.Errorf(" *** Failed test: %s *** Returned error: %v", "TestConfigReloading", err)
+	}
+}
+
 func (test *TestInputs) Test(t *testing.T) {
 	errorChannel := make(chan error, 1)
 	var once sync.Once
@@ -1045,6 +1144,66 @@ func TestTLSConfigIsEnabled(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := tc.config.IsEnabled(); got != tc.expected {
 				t.Errorf("IsEnabled() = %v, expected %v", got, tc.expected)
+			}
+		})
+	}
+}
+
+// TestConfigToTLSConfigVersionDefaults verifies that ConfigToTLSConfig resolves
+// unset TLS MinVersion/MaxVersion to the defaults (TLS 1.2 / TLS 1.3) in the
+// derived tls.Config, that explicitly set versions are preserved, and that the
+// provided TLSConfig is never mutated.
+func TestConfigToTLSConfigVersionDefaults(t *testing.T) {
+	for _, tc := range []struct {
+		name               string
+		provided           TLSConfig
+		expectedMinVersion uint16
+		expectedMaxVersion uint16
+	}{
+		{
+			name: "unset versions get defaulted",
+			provided: TLSConfig{
+				TLSCertPath: "testdata/server.crt",
+				TLSKeyPath:  "testdata/server.key",
+			},
+			expectedMinVersion: tls.VersionTLS12,
+			expectedMaxVersion: tls.VersionTLS13,
+		},
+		{
+			name: "explicit versions are preserved",
+			provided: TLSConfig{
+				TLSCertPath: "testdata/server.crt",
+				TLSKeyPath:  "testdata/server.key",
+				MinVersion:  tls.VersionTLS13,
+				MaxVersion:  tls.VersionTLS13,
+			},
+			expectedMinVersion: tls.VersionTLS13,
+			expectedMaxVersion: tls.VersionTLS13,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			provided := tc.provided
+			originalMin := provided.MinVersion
+			originalMax := provided.MaxVersion
+
+			cfg, err := ConfigToTLSConfig(&provided)
+			if err != nil {
+				t.Fatalf("ConfigToTLSConfig returned an error: %v", err)
+			}
+
+			if cfg.MinVersion != tc.expectedMinVersion {
+				t.Errorf("derived MinVersion = %d, expected %d", cfg.MinVersion, tc.expectedMinVersion)
+			}
+			if cfg.MaxVersion != tc.expectedMaxVersion {
+				t.Errorf("derived MaxVersion = %d, expected %d", cfg.MaxVersion, tc.expectedMaxVersion)
+			}
+
+			// The caller's config must not be mutated.
+			if provided.MinVersion != originalMin {
+				t.Errorf("provided MinVersion was mutated: got %d, want %d", provided.MinVersion, originalMin)
+			}
+			if provided.MaxVersion != originalMax {
+				t.Errorf("provided MaxVersion was mutated: got %d, want %d", provided.MaxVersion, originalMax)
 			}
 		})
 	}

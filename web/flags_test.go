@@ -80,6 +80,25 @@ func TestCheckFlags(t *testing.T) {
 			},
 			want: ErrNoListeners,
 		},
+		{
+			name: "both web config file and injected web config set",
+			flags: &FlagConfig{
+				WebListenAddresses: &[]string{":9100"},
+				WebSystemdSocket:   OfBool(false),
+				WebConfigFile:      OfString("testdata/web_config_noAuth.good.yml"),
+				WebConfig:          &Config{},
+			},
+			want: ErrConflictingFlagsInConfigs,
+		},
+		{
+			name: "only injected web config set",
+			flags: &FlagConfig{
+				WebListenAddresses: &[]string{":9100"},
+				WebSystemdSocket:   OfBool(false),
+				WebConfig:          &Config{},
+			},
+			want: nil,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if err := tc.flags.checkFlags(); !errors.Is(err, tc.want) {
