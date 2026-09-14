@@ -28,7 +28,7 @@ import (
 	"testing"
 	"time"
 
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v2"
 )
 
 // Helpers for literal FlagConfig
@@ -1045,6 +1045,74 @@ func TestTLSConfigIsEnabled(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := tc.config.IsEnabled(); got != tc.expected {
 				t.Errorf("IsEnabled() = %v, expected %v", got, tc.expected)
+			}
+		})
+	}
+}
+
+// TestServeWebConfigDefaults verifies that an injected FlagConfig.WebConfig
+// (one that never went through getConfig) has its TLS MinVersion/MaxVersion
+// defaulted by Serve when left unset, and that explicitly set versions are
+// preserved. Serve mutates the provided config in place, so the effective
+// values can be read back from flags.WebConfig after it has started.
+func TestServeWebConfigDefaults(t *testing.T) {
+	for _, tc := range []struct {
+		name               string
+		provided           TLSConfig
+		expectedMinVersion TLSVersion
+		expectedMaxVersion TLSVersion
+	}{
+		{
+			name: "unset versions get defaulted",
+			provided: TLSConfig{
+				TLSCertPath: "testdata/server.crt",
+				TLSKeyPath:  "testdata/server.key",
+			},
+			expectedMinVersion: tls.VersionTLS12,
+			expectedMaxVersion: tls.VersionTLS13,
+		},
+		{
+			name: "explicit versions are preserved",
+			provided: TLSConfig{
+				TLSCertPath: "testdata/server.crt",
+				TLSKeyPath:  "testdata/server.key",
+				MinVersion:  tls.VersionTLS13,
+				MaxVersion:  tls.VersionTLS13,
+			},
+			expectedMinVersion: tls.VersionTLS13,
+			expectedMaxVersion: tls.VersionTLS13,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			listener, err := net.Listen("tcp", "localhost:0")
+			if err != nil {
+				t.Fatalf("Could not listen: %v", err)
+			}
+			addr := listener.Addr().String()
+
+			server := &http.Server{
+				Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}),
+			}
+			t.Cleanup(func() { server.Close() })
+
+			flags := FlagConfig{
+				WebListenAddresses: &([]string{addr}),
+				WebSystemdSocket:   OfBool(false),
+				WebConfig:          &Config{TLSConfig: tc.provided},
+			}
+
+			go func() {
+				_ = Serve(listener, server, &flags, testlogger)
+			}()
+
+			// Give Serve a moment to apply the defaults.
+			time.Sleep(250 * time.Millisecond)
+
+			if flags.WebConfig.TLSConfig.MinVersion != tc.expectedMinVersion {
+				t.Errorf("MinVersion = %d, expected %d", flags.WebConfig.TLSConfig.MinVersion, tc.expectedMinVersion)
+			}
+			if flags.WebConfig.TLSConfig.MaxVersion != tc.expectedMaxVersion {
+				t.Errorf("MaxVersion = %d, expected %d", flags.WebConfig.TLSConfig.MaxVersion, tc.expectedMaxVersion)
 			}
 		})
 	}

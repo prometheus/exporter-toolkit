@@ -76,8 +76,16 @@ type FlagConfig struct {
 	// WebListenAddresses contains the listen addresses for the HTTP server.
 	WebListenAddresses *[]string
 	WebSystemdSocket   *bool
-	WebConfigFile      *string // Optional: path to the TLS config file. Ether this or TLSConfig must be set.
-	WebConfig          *Config // Optional: Configuration. If set, it overrides WebConfigFile.
+	// WebConfigFile is the optional path to the TLS config file. Either this or
+	// WebConfig must be set.
+	WebConfigFile *string
+	// WebConfig is an optional configuration. If set, it overrides
+	// WebConfigFile.
+	//
+	// TLS MinVersion and MaxVersion default to TLS 1.2 and TLS 1.3 when unset.
+	// Other fields are used as provided; in particular HTTP/2 is only enabled
+	// when HTTPConfig.HTTP2 is set to true.
+	WebConfig *Config
 }
 
 // checkFlags validates that the flag configuration contains the required
@@ -86,7 +94,8 @@ func (c *FlagConfig) checkFlags() error {
 	if c == nil {
 		return ErrMissingFlag
 	}
-	if c.WebConfigFile == nil {
+	// Either a config file path or an injected config must be provided.
+	if c.WebConfigFile == nil && c.WebConfig == nil {
 		return ErrMissingFlag
 	}
 	if c.WebSystemdSocket == nil && (c.WebListenAddresses == nil || len(*c.WebListenAddresses) == 0) {
@@ -159,9 +168,8 @@ func getConfig(configPath string) (*Config, error) {
 	}
 	c := &Config{
 		TLSConfig: TLSConfig{
-			MinVersion:               tls.VersionTLS12,
-			MaxVersion:               tls.VersionTLS13,
-			PreferServerCipherSuites: true,
+			MinVersion: tls.VersionTLS12,
+			MaxVersion: tls.VersionTLS13,
 		},
 		HTTPConfig: HTTPConfig{HTTP2: true},
 	}
@@ -395,6 +403,9 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 
 	// WebConfig overrides WebConfigFile. If WebConfig field is not set, then WebConfigFile is used.
 	if flags.WebConfig == nil {
+		if flags.WebConfigFile == nil {
+			return ErrMissingFlag
+		}
 		tlsConfigPath := *flags.WebConfigFile
 		if tlsConfigPath == "" {
 			logger.Info("TLS is disabled.", "http2", false, "address", l.Addr().String())
@@ -408,6 +419,13 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 	} else {
 		// Use the provided config.
 		c = flags.WebConfig
+		// set default values for any missing fields in the provided config.
+		if c.TLSConfig.MinVersion == 0 {
+			c.TLSConfig.MinVersion = tls.VersionTLS12
+		}
+		if c.TLSConfig.MaxVersion == 0 {
+			c.TLSConfig.MaxVersion = tls.VersionTLS13
+		}
 	}
 
 	err = ValidateWebConfig(c)
@@ -459,7 +477,7 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 	server.TLSConfig.GetConfigForClient = func(*tls.ClientHelloInfo) (*tls.Config, error) {
 		var tlsConfig *tls.Config
 		var err error
-		// Config overrides WebConfigFile. If Config fiels is not set, then WebConfigFile is used.
+		// WebConfig overrides WebConfigFile. If WebConfig field is not set, then WebConfigFile is used.
 		if flags.WebConfig == nil {
 			tlsConfigPath := *flags.WebConfigFile
 
