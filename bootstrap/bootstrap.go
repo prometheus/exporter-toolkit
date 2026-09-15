@@ -22,6 +22,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/alecthomas/kingpin/v2"
@@ -64,12 +65,78 @@ type Bootstrap struct {
 	MetricsPath string
 	// FlagConfig contains the parsed exporter-toolkit web flags.
 	FlagConfig *web.FlagConfig
-	// DisableExporterMetrics reports whether exporter self-metrics should be disabled.
+	// DisableExporterMetrics is the parsed value of
+	// --web.disable-exporter-metrics. Acting on it is left to the metrics
+	// handler, which is the only thing that knows what it collects.
 	DisableExporterMetrics bool
-	// MaxRequests is the parsed value of --web.max-requests.
+	// MaxRequests is the parsed value of --web.max-requests. The metrics
+	// endpoint is already bound by it, so a handler built here does not need
+	// to pass it to promhttp.HandlerOpts as well.
 	MaxRequests int
 
 	routes []route
+}
+
+// maxRequestsLogInterval is the shortest gap between two lines reporting
+// rejected scrapes, so that a saturated endpoint cannot flood the log.
+const maxRequestsLogInterval = time.Minute
+
+// maxRequestsHandler bounds how many requests h serves at once. Requests
+// arriving while the limit is reached are answered with 503 rather than
+// queued, so that a scrape which cannot be served fails quickly instead of
+// piling up behind the ones that are already running.
+//
+// Rejections are reported to logger at most once per maxRequestsLogInterval,
+// carrying the number dropped since the previous line, because they never
+// reach h and so are counted by none of its metrics.
+//
+// A limit of zero or less disables the bound and h is returned unchanged.
+func maxRequestsHandler(h http.Handler, limit int, logger *slog.Logger) http.Handler {
+	if limit <= 0 {
+		return h
+	}
+	inFlight := make(chan struct{}, limit)
+	rejections := &rejectionLog{logger: logger, interval: maxRequestsLogInterval}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case inFlight <- struct{}{}:
+			defer func() { <-inFlight }()
+			h.ServeHTTP(w, r)
+		default:
+			rejections.record(limit)
+			http.Error(w, fmt.Sprintf("Limit of concurrent requests reached (%d), try again later.", limit), http.StatusServiceUnavailable)
+		}
+	})
+}
+
+// rejectionLog reports dropped scrapes at a bounded rate. Drops that arrive
+// while a line is being withheld are not lost, they are added to the count
+// reported by the next one.
+type rejectionLog struct {
+	logger   *slog.Logger
+	interval time.Duration
+	dropped  atomic.Int64
+	lastLog  atomic.Int64 // Unix nanoseconds, zero until the first line.
+}
+
+// record counts one rejected request and logs unless a line was emitted less
+// than the interval ago.
+func (l *rejectionLog) record(limit int) {
+	l.dropped.Add(1)
+	if l.logger == nil {
+		return
+	}
+	now := time.Now().UnixNano()
+	last := l.lastLog.Load()
+	if last != 0 && now-last < int64(l.interval) {
+		return
+	}
+	// Only the caller that claims the slot logs, so a burst produces one line.
+	if !l.lastLog.CompareAndSwap(last, now) {
+		return
+	}
+	l.logger.Warn("Scrape requests rejected, limit of concurrent requests reached",
+		"limit", limit, "dropped", l.dropped.Swap(0))
 }
 
 // route is an additional handler registered next to the metrics endpoint.
@@ -176,7 +243,7 @@ func New(c Config) *Runner {
 		).Bool(),
 		maxRequests: app.Flag(
 			"web.max-requests",
-			"Maximum number of parallel scrape requests. Use 0 to disable.",
+			"Maximum number of scrape requests served in parallel. Further requests are answered with 503 until one completes. Use 0 to disable.",
 		).Default("40").Int(),
 	}
 
@@ -269,7 +336,7 @@ func (t *Runner) resolveMetricsHandler() (http.Handler, error) {
 func (t *Runner) newServer(metricsHandler http.Handler) (*http.Server, error) {
 	mux := http.NewServeMux()
 	metricsPath := t.MetricsPath
-	mux.Handle(metricsPath, metricsHandler)
+	mux.Handle(metricsPath, maxRequestsHandler(metricsHandler, t.MaxRequests, t.Logger))
 
 	rootOverridden := false
 	if t.bootstrap != nil {
