@@ -22,6 +22,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/alecthomas/kingpin/v2"
@@ -30,6 +31,7 @@ import (
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/exporter-toolkit/web"
 	"github.com/prometheus/exporter-toolkit/web/kingpinflag"
+	"golang.org/x/time/rate"
 )
 
 var (
@@ -64,12 +66,43 @@ type Bootstrap struct {
 	MetricsPath string
 	// FlagConfig contains the parsed exporter-toolkit web flags.
 	FlagConfig *web.FlagConfig
-	// DisableExporterMetrics reports whether exporter self-metrics should be disabled.
+	// DisableExporterMetrics is the parsed value of --web.disable-exporter-metrics.
 	DisableExporterMetrics bool
 	// MaxRequests is the parsed value of --web.max-requests.
 	MaxRequests int
 
 	routes []route
+}
+
+// maxRequestsLogInterval is the shortest gap between two lines reporting
+// rejected requests, so that a saturated endpoint cannot flood the log.
+const maxRequestsLogInterval = time.Minute
+
+// maxRequestsHandler bounds how many requests h serves at once, answering
+// the rest with 503 instead of queuing them. A limit of zero or less
+// disables the bound and h is returned unchanged.
+func maxRequestsHandler(h http.Handler, limit int, logger *slog.Logger) http.Handler {
+	if limit <= 0 {
+		return h
+	}
+	inFlight := make(chan struct{}, limit)
+	logLimiter := rate.NewLimiter(rate.Every(maxRequestsLogInterval), 1)
+	var dropped atomic.Int64
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case inFlight <- struct{}{}:
+			defer func() { <-inFlight }()
+			h.ServeHTTP(w, r)
+		default:
+			dropped.Add(1)
+			// Batch dropped counts between log lines rather than logging every one.
+			if logger != nil && logLimiter.Allow() {
+				logger.Warn("Requests rejected, limit of concurrent requests reached",
+					"limit", limit, "dropped", dropped.Swap(0))
+			}
+			http.Error(w, fmt.Sprintf("Limit of concurrent requests reached (%d), try again later.", limit), http.StatusServiceUnavailable)
+		}
+	})
 }
 
 // route is an additional handler registered next to the metrics endpoint.
@@ -176,7 +209,7 @@ func New(c Config) *Runner {
 		).Bool(),
 		maxRequests: app.Flag(
 			"web.max-requests",
-			"Maximum number of parallel scrape requests. Use 0 to disable.",
+			"Maximum number of requests served in parallel. Further requests are answered with 503 until one completes. Use 0 to disable.",
 		).Default("40").Int(),
 	}
 
@@ -269,7 +302,7 @@ func (t *Runner) resolveMetricsHandler() (http.Handler, error) {
 func (t *Runner) newServer(metricsHandler http.Handler) (*http.Server, error) {
 	mux := http.NewServeMux()
 	metricsPath := t.MetricsPath
-	mux.Handle(metricsPath, metricsHandler)
+	mux.Handle(metricsPath, maxRequestsHandler(metricsHandler, t.MaxRequests, t.Logger))
 
 	rootOverridden := false
 	if t.bootstrap != nil {
