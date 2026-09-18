@@ -78,6 +78,14 @@ type Bootstrap struct {
 // rejected requests, so that a saturated endpoint cannot flood the log.
 const maxRequestsLogInterval = time.Minute
 
+// MaxRequestsHandler bounds h by --web.max-requests, the same as the metrics
+// endpoint. Wrap a route in it before passing it to Handle or HandleFunc to
+// opt that route into the bound too; routes that don't wrap themselves stay
+// unbounded, which is right for health and readiness checks.
+func (b *Bootstrap) MaxRequestsHandler(h http.Handler) http.Handler {
+	return maxRequestsHandler(h, b.MaxRequests, b.Logger)
+}
+
 // maxRequestsHandler bounds how many requests h serves at once, answering
 // the rest with 503 instead of queuing them. A limit of zero or less
 // disables the bound and h is returned unchanged.
@@ -113,7 +121,8 @@ type route struct {
 
 // Handle registers an additional handler on the exporter mux. Handlers
 // registered from a MetricsHandlerFactory are served alongside the metrics
-// endpoint and the landing page.
+// endpoint and the landing page. Wrap handler in Bootstrap.MaxRequestsHandler
+// to bound it by --web.max-requests.
 func (b *Bootstrap) Handle(pattern string, handler http.Handler) {
 	b.routes = append(b.routes, route{pattern: pattern, handler: handler})
 }

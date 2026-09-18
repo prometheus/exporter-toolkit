@@ -107,6 +107,30 @@ func runnerForMaxRequests(t *testing.T, handler http.Handler, logs *bytes.Buffer
 	return server
 }
 
+// runnerForFactory builds a server whose routes come from factory, with
+// --web.max-requests set to the given value.
+func runnerForFactory(t *testing.T, factory MetricsHandlerFactory, args ...string) *http.Server {
+	t.Helper()
+	tk := New(Config{
+		App:                   kingpin.New("test", ""),
+		Name:                  "test_exporter",
+		DefaultAddress:        ":0",
+		MetricsHandlerFactory: factory,
+	})
+	if err := tk.parse(args); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	handler, err := tk.resolveMetricsHandler()
+	if err != nil {
+		t.Fatalf("resolveMetricsHandler: %v", err)
+	}
+	server, err := tk.newServer(handler)
+	if err != nil {
+		t.Fatalf("newServer: %v", err)
+	}
+	return server
+}
+
 // TestMaxRequestsLimitsParallelScrapes checks that --web.max-requests bounds
 // the number of scrapes served at once and answers the rest with 503.
 func TestMaxRequestsLimitsParallelScrapes(t *testing.T) {
@@ -179,45 +203,57 @@ func TestMaxRequestsZeroDisablesTheLimit(t *testing.T) {
 	awaitDone(t, &wg)
 }
 
-// TestMaxRequestsDoesNotLimitOtherRoutes checks that the bound applies to the
-// metrics endpoint only, since that is what the flag describes.
-func TestMaxRequestsDoesNotLimitOtherRoutes(t *testing.T) {
-	metrics := newBlockingHandler(1)
-	tk := New(Config{
-		App:            kingpin.New("test", ""),
-		Name:           "test_exporter",
-		DefaultAddress: ":0",
-		MetricsHandlerFactory: func(b *Bootstrap) (http.Handler, error) {
-			b.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-				w.Write([]byte("ok"))
+// TestMaxRequestsBoundsOptedInRoutes checks which routes --web.max-requests
+// bounds: the metrics endpoint always, and any other route wrapped in
+// Bootstrap.MaxRequestsHandler. A route that doesn't opt in, like /healthz,
+// stays responsive regardless of which route is saturated.
+func TestMaxRequestsBoundsOptedInRoutes(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		target string // the route to saturate and expect a 503 from.
+	}{
+		{name: "metrics endpoint is bound by default", target: "/metrics"},
+		{name: "route wrapped in MaxRequestsHandler is bound", target: "/probe"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			blocking := newBlockingHandler(1)
+			metricsHandler := http.Handler(blocking)
+			if tc.target != "/metrics" {
+				metricsHandler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					w.WriteHeader(http.StatusOK)
+				})
+			}
+			server := runnerForFactory(t, func(b *Bootstrap) (http.Handler, error) {
+				if tc.target == "/probe" {
+					b.Handle("/probe", b.MaxRequestsHandler(blocking))
+				}
+				b.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+					w.Write([]byte("ok"))
+				})
+				return metricsHandler, nil
+			}, "--web.max-requests=1")
+
+			var wg sync.WaitGroup
+			wg.Go(func() {
+				server.Handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, tc.target, nil))
 			})
-			return metrics, nil
-		},
-	})
-	if err := tk.parse([]string{"--web.max-requests=1"}); err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	handler, err := tk.resolveMetricsHandler()
-	if err != nil {
-		t.Fatalf("resolveMetricsHandler: %v", err)
-	}
-	server, err := tk.newServer(handler)
-	if err != nil {
-		t.Fatalf("newServer: %v", err)
-	}
+			awaitEntered(t, blocking)
 
-	var wg sync.WaitGroup
-	wg.Go(func() {
-		server.Handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/metrics", nil))
-	})
-	awaitEntered(t, metrics)
+			rec := httptest.NewRecorder()
+			server.Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.target, nil))
+			if rec.Code != http.StatusServiceUnavailable {
+				t.Errorf("second request to %s: got status %d, expected %d", tc.target, rec.Code, http.StatusServiceUnavailable)
+			}
 
-	rec := httptest.NewRecorder()
-	server.Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
-	if rec.Code != http.StatusOK {
-		t.Errorf("/healthz while /metrics is saturated: got status %d, expected %d", rec.Code, http.StatusOK)
+			// /healthz never opted in, so it stays responsive.
+			rec = httptest.NewRecorder()
+			server.Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+			if rec.Code != http.StatusOK {
+				t.Errorf("/healthz while %s is saturated: got status %d, expected %d", tc.target, rec.Code, http.StatusOK)
+			}
+
+			close(blocking.release)
+			awaitDone(t, &wg)
+		})
 	}
-
-	close(metrics.release)
-	awaitDone(t, &wg)
 }
