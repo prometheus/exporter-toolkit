@@ -18,6 +18,7 @@ jobs:
         go_version:
           - "1.25"
           - "1.26"
+          - "1.27"
     container:
       image: quay.io/prometheus/golang-builder:${{ matrix.go_version }}-base
     env:
