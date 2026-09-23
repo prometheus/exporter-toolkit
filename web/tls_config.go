@@ -469,7 +469,7 @@ func tlsNextProtos(server *http.Server, http2Enabled bool) []string {
 	http1 := true
 	http2 := http2Enabled && server.TLSNextProto["h2"] != nil
 	if server.Protocols != nil {
-		http1 = server.Protocols.HTTP1()
+		http1 = http1Enabled(*server.Protocols)
 		// An h2 handler may have been registered for unencrypted HTTP/2 only.
 		http2 = http2 && server.Protocols.HTTP2()
 	}

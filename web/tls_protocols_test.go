@@ -23,6 +23,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"go/build"
 	"io"
 	"math/big"
 	"net"
@@ -64,6 +65,12 @@ func TestServeTLSProtocols(t *testing.T) {
 	customHTTP2 := map[string]func(*http.Server, *tls.Conn, http.Handler){
 		"h2": func(_ *http.Server, conn *tls.Conn, _ http.Handler) { conn.Close() },
 	}
+	// Go 1.27 defaults an empty explicit protocol set to HTTP/1. Earlier
+	// supported toolchains leave all protocols disabled.
+	emptyProtocolsWant := ""
+	if slices.Contains(build.Default.ReleaseTags, "go1.27") {
+		emptyProtocolsWant = "http/1.1"
+	}
 	tests := []struct {
 		name         string
 		disableHTTP2 bool
@@ -84,7 +91,7 @@ func TestServeTLSProtocols(t *testing.T) {
 		{name: "http2 only does not advertise http1", protocols: protocols(false, true, false), clientProtos: []string{"http/1.1"}},
 		{name: "unencrypted http2 does not enable TLS http2", protocols: protocols(true, false, true), want: "http/1.1"},
 		{name: "unencrypted http2 only", protocols: protocols(false, false, true)},
-		{name: "empty explicit protocols", protocols: new(http.Protocols)},
+		{name: "empty explicit protocols", protocols: new(http.Protocols), want: emptyProtocolsWant},
 		{name: "web config overrides explicit http2", protocols: protocols(true, true, false), disableHTTP2: true, want: "http/1.1"},
 		{name: "GODEBUG overrides explicit http2", protocols: protocols(true, true, false), goDebug: "http2server=0", want: "http/1.1"},
 		{name: "explicit protocols override legacy disablement", protocols: protocols(true, true, false), nextProto: map[string]func(*http.Server, *tls.Conn, http.Handler){}, want: "h2"},
@@ -180,7 +187,12 @@ func TestServeTLSProtocolsAfterReload(t *testing.T) {
 		transport := &http.Transport{
 			ForceAttemptHTTP2: true,
 			TLSClientConfig: &tls.Config{
-				RootCAs: roots, ServerName: "localhost", Certificates: []tls.Certificate{cert},
+				RootCAs: roots, ServerName: "localhost",
+				// Send the requested certificate even if its issuer is absent from
+				// the server's advertised CAs, so rejection tests CA verification.
+				GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+					return &cert, nil
+				},
 			},
 		}
 		defer transport.CloseIdleConnections()
