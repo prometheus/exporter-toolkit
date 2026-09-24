@@ -81,10 +81,39 @@ type webHandler struct {
 	handler       http.Handler
 	logger        *slog.Logger
 	cache         *cache
+	// limiterMtx guards limiter and limiterConfig, which are replaced when the
+	// rate limiter configuration changes on disk.
+	limiterMtx    sync.Mutex
 	limiter       *rate.Limiter
+	limiterConfig RateLimiterConfig
 	// bcryptMtx is there to ensure that bcrypt.CompareHashAndPassword is run
 	// only once in parallel as this is CPU intensive.
 	bcryptMtx sync.Mutex
+}
+
+// rateLimiter returns the limiter to apply for the given configuration,
+// building a new one when the configuration has changed since the last
+// request. It returns nil when rate limiting is not configured.
+//
+// Replacing the limiter resets its token bucket, so a change to rate_limit
+// starts the interval afresh.
+func (u *webHandler) rateLimiter(c RateLimiterConfig) *rate.Limiter {
+	u.limiterMtx.Lock()
+	defer u.limiterMtx.Unlock()
+
+	if c == u.limiterConfig {
+		return u.limiter
+	}
+	u.limiterConfig = c
+
+	if c.Interval == 0 {
+		u.limiter = nil
+		u.logger.Info("Rate Limiter is disabled.")
+		return nil
+	}
+	u.limiter = rate.NewLimiter(rate.Every(c.Interval), c.Burst)
+	u.logger.Info("Rate Limiter is enabled.", "burst", c.Burst, "interval", c.Interval)
+	return u.limiter
 }
 
 func (u *webHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -95,7 +124,7 @@ func (u *webHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if u.limiter != nil && !u.limiter.Allow() {
+	if limiter := u.rateLimiter(c.RateLimiterConfig); limiter != nil && !limiter.Allow() {
 		http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
 		return
 	}
