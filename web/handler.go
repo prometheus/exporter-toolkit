@@ -23,9 +23,15 @@ import (
 	"strings"
 	"sync"
 
+	config_util "github.com/prometheus/common/config"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/time/rate"
 )
+
+// decoyPassword is hashed to produce the hash that requests for unknown users
+// are compared against. Its value is irrelevant; only the cost of hashing it
+// matters.
+const decoyPassword = "fakepassword"
 
 // extraHTTPHeaders is a map of HTTP headers that can be added to HTTP
 // responses.
@@ -76,15 +82,78 @@ HeadersLoop:
 	return nil
 }
 
+// maxBcryptCost returns the highest bcrypt cost among the configured users, or
+// bcrypt.MinCost if none of them can be parsed. Hashes are validated by
+// validateUsers before the server starts, so an unparseable hash here means the
+// configuration was changed to an invalid one after startup.
+func maxBcryptCost(users map[string]config_util.Secret) int {
+	cost := bcrypt.MinCost
+	for _, hash := range users {
+		c, err := bcrypt.Cost([]byte(hash))
+		if err != nil {
+			continue
+		}
+		if c > cost {
+			cost = c
+		}
+	}
+	return cost
+}
+
+// decoyHashes caches one bcrypt hash per cost, used for requests naming a user
+// that is not configured.
+//
+// The cache is process-wide rather than per handler: the hashes are derived
+// from a fixed password and hold no configuration, and generating one at a high
+// cost is expensive enough to be worth doing only once.
+type decoyHashes struct {
+	mtx    sync.Mutex
+	hashes map[int][]byte
+}
+
+var defaultDecoyHashes = newDecoyHashes()
+
+func newDecoyHashes() *decoyHashes {
+	return &decoyHashes{hashes: make(map[int][]byte)}
+}
+
+// forCost returns a hash with the given cost, generating it on first use. The
+// generation happens at most once per cost for the lifetime of the process.
+func (d *decoyHashes) forCost(cost int) ([]byte, error) {
+	d.mtx.Lock()
+	defer d.mtx.Unlock()
+
+	if hash, ok := d.hashes[cost]; ok {
+		return hash, nil
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(decoyPassword), cost)
+	if err != nil {
+		return nil, err
+	}
+	d.hashes[cost] = hash
+	return hash, nil
+}
+
 type webHandler struct {
 	tlsConfigPath string
 	handler       http.Handler
 	logger        *slog.Logger
 	cache         *cache
 	limiter       *rate.Limiter
+	// decoys is nil in the default configuration and is then read from the
+	// process-wide cache. Tests set it to isolate themselves from it.
+	decoys *decoyHashes
 	// bcryptMtx is there to ensure that bcrypt.CompareHashAndPassword is run
 	// only once in parallel as this is CPU intensive.
 	bcryptMtx sync.Mutex
+}
+
+// decoyHashes returns the cache this handler draws decoy hashes from.
+func (u *webHandler) decoyHashes() *decoyHashes {
+	if u.decoys != nil {
+		return u.decoys
+	}
+	return defaultDecoyHashes
 }
 
 func (u *webHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -115,10 +184,24 @@ func (u *webHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		hashedPassword, validUser := c.Users[user]
 
 		if !validUser {
-			// The user is not found. Use a fixed password hash to
-			// prevent user enumeration by timing requests.
-			// This is a bcrypt-hashed version of "fakepassword".
-			hashedPassword = "$2y$10$QOauhQNbBCuQDKes6eFzPeMqBSjb7Mr5DUmpZ/VcEd00UAV/LDeSi"
+			// The user is not found. Compare against a decoy hash so
+			// that the request takes about as long as one naming a
+			// configured user, which prevents user enumeration by
+			// timing requests.
+			//
+			// The decoy is generated at the highest cost in use, so a
+			// request for an unknown user is never answered faster
+			// than one for a configured user. Where the configured
+			// costs differ, the cheaper users are still answered
+			// faster than the decoy; using a single cost for every
+			// user avoids that.
+			decoy, err := u.decoyHashes().forCost(maxBcryptCost(c.Users))
+			if err != nil {
+				u.logger.Error("Unable to generate decoy password hash", "err", err.Error())
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+				return
+			}
+			hashedPassword = config_util.Secret(decoy)
 		}
 
 		cacheKey := strings.Join(
