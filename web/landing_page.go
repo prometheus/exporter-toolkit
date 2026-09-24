@@ -20,22 +20,23 @@ package web
 import (
 	"bytes"
 	_ "embed"
+	"html/template"
 	"net/http"
 	"strings"
-	"text/template"
+	texttemplate "text/template"
 )
 
 // Config represents the configuration of the web listener.
 type LandingConfig struct {
 	RoutePrefix string         // The route prefix for the exporter.
 	HeaderColor string         // Used for the landing page header.
-	CSS         string         // CSS style tag for the landing page.
+	CSS         template.CSS   // CSS style tag for the landing page.
 	Name        string         // The name of the exporter, generally suffixed by _exporter.
 	Description string         // A short description about the exporter.
 	Form        LandingForm    // A POST form.
 	Links       []LandingLinks // Links displayed on the landing page.
-	ExtraHTML   string         // Additional HTML to be embedded.
-	ExtraCSS    string         // Additional CSS to be embedded.
+	ExtraHTML   template.HTML  // Additional HTML to be embedded.
+	ExtraCSS    template.CSS   // Additional CSS to be embedded.
 	Version     string         // The version displayed.
 	Profiling   string         // If false, don't display profiling links.
 }
@@ -92,11 +93,14 @@ func NewLandingPage(c LandingConfig) (*LandingPageHandler, error) {
 			// Default to Prometheus orange.
 			c.HeaderColor = "#e6522c"
 		}
-		cssTemplate := template.Must(template.New("landing css").Parse(landingPagecssContent))
+		// The CSS is generated with text/template: its output is injected
+		// into the page as a template.CSS value below, and html/template
+		// would escape it for an HTML context rather than a CSS one.
+		cssTemplate := texttemplate.Must(texttemplate.New("landing css").Parse(landingPagecssContent))
 		if err := cssTemplate.Execute(&buf, c); err != nil {
 			return nil, err
 		}
-		c.CSS = buf.String()
+		c.CSS = template.CSS(buf.String())
 	}
 	if c.RoutePrefix == "" {
 		c.RoutePrefix = "/"
