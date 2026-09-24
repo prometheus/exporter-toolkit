@@ -454,10 +454,38 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 		if err != nil {
 			return nil, err
 		}
-		config.NextProtos = server.TLSConfig.NextProtos
+		config.NextProtos = tlsNextProtos(server, c.HTTPConfig.HTTP2)
 		return config, nil
 	}
 	return server.ServeTLS(l, "", "")
+}
+
+// tlsNextProtos preserves the server's ALPN policy on reloaded TLS configs.
+// ServeTLS does not necessarily populate the original server.TLSConfig: it
+// adjusts the protocols on an internal clone, which the reload callback replaces.
+func tlsNextProtos(server *http.Server, http2Enabled bool) []string {
+	// ServeTLS initializes protocol handlers before accepting connections. Checking
+	// registration respects GODEBUG=http2server=0 and custom HTTP/2 implementations.
+	http1 := true
+	http2 := http2Enabled && server.TLSNextProto["h2"] != nil
+	if server.Protocols != nil {
+		http1 = http1Enabled(*server.Protocols)
+		// An h2 handler may have been registered for unencrypted HTTP/2 only.
+		http2 = http2 && server.Protocols.HTTP2()
+	}
+
+	// Do not modify the original configuration or discard other ALPN protocols.
+	protos := slices.Clone(server.TLSConfig.NextProtos)
+	protos = slices.DeleteFunc(protos, func(proto string) bool {
+		return (proto == "h2" && !http2) || (proto == "http/1.1" && !http1)
+	})
+	if http2 && !slices.Contains(protos, "h2") {
+		protos = append(protos, "h2")
+	}
+	if http1 && !slices.Contains(protos, "http/1.1") {
+		protos = append(protos, "http/1.1")
+	}
+	return protos
 }
 
 // Validate configuration file by reading the configuration and the certificates.
