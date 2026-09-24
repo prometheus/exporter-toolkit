@@ -21,9 +21,6 @@ jobs:
           - "1.27"
     container:
       image: quay.io/prometheus/golang-builder:${{ matrix.go_version }}-base
-    env:
-      # Override Go 1.18 security deprecations.
-      GODEBUG: "x509sha1=1,tls10default=1"
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
