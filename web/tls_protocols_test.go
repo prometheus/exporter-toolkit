@@ -161,6 +161,122 @@ func startTLSProtocolServer(t *testing.T, server *http.Server, configPath string
 	return listener.Addr().String()
 }
 
+type orderedListener struct {
+	wait     <-chan struct{}
+	accepted chan struct{}
+}
+
+func (l *orderedListener) Addr() net.Addr {
+	<-l.wait
+	return &net.TCPAddr{}
+}
+
+func (l *orderedListener) Accept() (net.Conn, error) {
+	close(l.accepted)
+	return nil, net.ErrClosed
+}
+
+func (*orderedListener) Close() error { return nil }
+
+func TestServeMultipleTLS(t *testing.T) {
+	t.Setenv("GODEBUG", os.Getenv("GODEBUG")+",http2server=1")
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte("ok"))
+	})}
+	listeners := make([]net.Listener, 0, 2)
+	for range 2 {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		listeners = append(listeners, listener)
+		t.Cleanup(func() { listener.Close() })
+	}
+	configPath := "testdata/web_config_noAuth.good.yml"
+	done := make(chan error, 1)
+	go func() {
+		done <- ServeMultiple(listeners, server, &FlagConfig{WebConfigFile: &configPath}, testlogger)
+	}()
+	t.Cleanup(func() {
+		server.Close()
+		for _, listener := range listeners {
+			listener.Close()
+		}
+		select {
+		case err := <-done:
+			if err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, net.ErrClosed) {
+				t.Errorf("ServeMultiple: %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Error("ServeMultiple did not stop")
+		}
+	})
+	transport := getTLSClient("").Transport.(*http.Transport)
+	transport.ForceAttemptHTTP2 = true
+	transport.TLSClientConfig.ServerName = "localhost"
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport, Timeout: 5 * time.Second}
+	for _, listener := range listeners {
+		resp, err := client.Get("https://" + listener.Addr().String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode != http.StatusOK || string(body) != "ok" {
+			t.Errorf("response = %d %q, want 200 ok", resp.StatusCode, body)
+		}
+		if resp.ProtoMajor != 2 || resp.TLS.NegotiatedProtocol != "h2" {
+			t.Errorf("protocol = %s, ALPN = %q; want HTTP/2 with h2", resp.Proto, resp.TLS.NegotiatedProtocol)
+		}
+	}
+}
+
+func TestServeMultipleWrapsHandlerOnce(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		configPath string
+	}{
+		{name: "plaintext"},
+		{name: "basic auth", configPath: "testdata/web_config_users_noTLS.good.yml"},
+		{name: "TLS", configPath: "testdata/web_config_noAuth.good.yml"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mux := http.NewServeMux()
+			server := &http.Server{Handler: mux}
+			listeners := make([]net.Listener, 3)
+			previous := make(chan struct{})
+			close(previous)
+			for i := range listeners {
+				listener := &orderedListener{wait: previous, accepted: make(chan struct{})}
+				listeners[i] = listener
+				previous = listener.accepted
+			}
+			if err := ServeMultiple(listeners, server, &FlagConfig{WebConfigFile: &tc.configPath}, testlogger); !errors.Is(err, net.ErrClosed) {
+				t.Fatalf("ServeMultiple: %v", err)
+			}
+			if tc.configPath == "" {
+				if server.Handler != mux {
+					t.Fatal("plaintext server handler changed")
+				}
+				return
+			}
+			if handler, ok := server.Handler.(*webHandler); !ok || handler.handler != mux {
+				t.Fatal("server handler was not wrapped exactly once")
+			}
+		})
+	}
+}
+
+func TestServeMultipleNoListeners(t *testing.T) {
+	if err := ServeMultiple(nil, nil, nil, testlogger); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestServeTLSProtocolsAfterReload(t *testing.T) {
 	t.Setenv("GODEBUG", os.Getenv("GODEBUG")+",http2server=1")
 	cert1, certPEM1, keyPEM1 := tlsProtocolCertificate(t, 1)
