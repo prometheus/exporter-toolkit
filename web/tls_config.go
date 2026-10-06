@@ -313,17 +313,20 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 	return cfg, nil
 }
 
-// ServeMultiple starts the server on the given listeners. The FlagConfig is
-// also passed on to Serve.
+// ServeMultiple starts the server on the given listeners. It configures the
+// server once before serving any listener.
 func ServeMultiple(listeners []net.Listener, server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
 	if len(listeners) == 0 {
 		return errors.New("no listeners provided")
 	}
-	setErrorLog(server, logger)
+	tlsHTTP, err := configureServer(server, flags, logger)
+	if err != nil {
+		return err
+	}
 	errs := new(errgroup.Group)
 	for _, l := range listeners {
 		errs.Go(func() error {
-			return Serve(l, server, flags, logger)
+			return serveListener(l, server, tlsHTTP, logger)
 		})
 	}
 	return errs.Wait()
@@ -393,24 +396,31 @@ func parseVsockPort(address string) (uint32, error) {
 	return uint32(port), nil
 }
 
-// Server starts the server on the given listener. Based on the file path
+// Serve starts the server on the given listener. Based on the file path
 // WebConfigFile in the FlagConfig, TLS or basic auth could be enabled.
 //
-// If server.ErrorLog is nil, Serve sets it so that errors logged by the HTTP
-// server itself, such as TLS handshake errors, go to logger at warn level.
-// Callers that pass the same server to Serve from several goroutines should
-// set server.ErrorLog before starting them, as ServeMultiple does.
+// Serve changes the server configuration. Do not call it concurrently
+// for the same server or while that server is serving requests.
+// Use ServeMultiple to serve multiple listeners with one server.
+// If server.ErrorLog is nil, Serve sends HTTP server errors to logger at
+// warn level.
 func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
-	logger.Info("Listening on", "address", l.Addr().String())
+	tlsHTTP, err := configureServer(server, flags, logger)
+	if err != nil {
+		return err
+	}
+	return serveListener(l, server, tlsHTTP, logger)
+}
+
+func configureServer(server *http.Server, flags *FlagConfig, logger *slog.Logger) (*HTTPConfig, error) {
 	setErrorLog(server, logger)
 	tlsConfigPath := *flags.WebConfigFile
 	if tlsConfigPath == "" {
-		logger.Info("TLS is disabled.", "http2", false, "address", l.Addr().String())
-		return server.Serve(l)
+		return nil, nil
 	}
 
 	if err := validateUsers(tlsConfigPath); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Setup basic authentication.
@@ -421,7 +431,7 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 
 	c, err := getConfig(tlsConfigPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var limiter *rate.Limiter
@@ -441,18 +451,16 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 	config, err := ConfigToTLSConfig(&c.TLSConfig)
 	switch err {
 	case nil:
+		// Valid TLS config.
 		if !c.HTTPConfig.HTTP2 {
 			server.TLSNextProto = make(map[string]func(*http.Server, *tls.Conn, http.Handler))
 		}
-		// Valid TLS config.
-		logger.Info("TLS is enabled.", "http2", c.HTTPConfig.HTTP2, "address", l.Addr().String())
 	case errNoTLSConfig:
 		// No TLS config, back to plain HTTP.
-		logger.Info("TLS is disabled.", "http2", false, "address", l.Addr().String())
-		return server.Serve(l)
+		return nil, nil
 	default:
 		// Invalid TLS config.
-		return err
+		return nil, err
 	}
 
 	server.TLSConfig = config
@@ -467,6 +475,16 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 		config.NextProtos = tlsNextProtos(server, c.HTTPConfig.HTTP2)
 		return config, nil
 	}
+	return &c.HTTPConfig, nil
+}
+
+func serveListener(l net.Listener, server *http.Server, tlsHTTP *HTTPConfig, logger *slog.Logger) error {
+	logger.Info("Listening on", "address", l.Addr().String())
+	if tlsHTTP == nil {
+		logger.Info("TLS is disabled.", "http2", false, "address", l.Addr().String())
+		return server.Serve(l)
+	}
+	logger.Info("TLS is enabled.", "http2", tlsHTTP.HTTP2, "address", l.Addr().String())
 	return server.ServeTLS(l, "", "")
 }
 
