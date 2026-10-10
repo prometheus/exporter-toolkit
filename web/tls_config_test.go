@@ -70,6 +70,10 @@ var (
 		"Certificate required": regexp.MustCompile(`certificate required`),
 		"Unknown CA":           regexp.MustCompile(`unknown certificate authority`),
 		"Too Many Requests":    regexp.MustCompile(`Too Many Requests`),
+		"SANs without required client cert": regexp.MustCompile(
+			`client_allowed_sans requires client_auth_type`),
+		"No client certificate": regexp.MustCompile(
+			`client did not present a certificate to match against client_allowed_sans`),
 	}
 )
 
@@ -190,6 +194,16 @@ func TestYAMLFiles(t *testing.T) {
 			Name:           `invalid config yml (bad TLS version)`,
 			YAMLConfigPath: "testdata/web_config_noAuth_wrongTLSVersion.bad.yml",
 			ExpectedError:  ErrorMap["Unknown TLS version"],
+		},
+		{
+			Name:           `invalid config yml (client_allowed_sans with optional client cert)`,
+			YAMLConfigPath: "testdata/web_config_auth_client_san_optional_cert.bad.yaml",
+			ExpectedError:  ErrorMap["SANs without required client cert"],
+		},
+		{
+			Name:           `invalid config yml (client_allowed_sans without client auth)`,
+			YAMLConfigPath: "testdata/web_config_auth_client_san_no_client_auth.bad.yaml",
+			ExpectedError:  ErrorMap["SANs without required client cert"],
 		},
 	}
 	for _, testInputs := range testTables {
