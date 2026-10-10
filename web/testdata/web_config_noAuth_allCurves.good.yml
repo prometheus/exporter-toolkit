@@ -7,3 +7,4 @@ tls_server_config:
     - CurveP384
     - CurveP521
     - X25519
+    - X25519MLKEM768
