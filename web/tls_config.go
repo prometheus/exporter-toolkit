@@ -38,9 +38,10 @@ import (
 )
 
 var (
-	errNoTLSConfig = errors.New("TLS config is not present")
-	ErrMissingFlag = errors.New("missing required flag configuration")
-	ErrNoListeners = errors.New("no web listen address or systemd socket flag specified")
+	errNoTLSConfig               = errors.New("TLS config is not present")
+	ErrMissingFlag               = errors.New("missing required flag configuration")
+	ErrNoListeners               = errors.New("no web listen address or systemd socket flag specified")
+	ErrConflictingFlagsInConfigs = errors.New("conflicting flag configuration in TLS config. Both a config file path and an injected config cannot be provided at the same time.")
 )
 
 type Config struct {
@@ -77,8 +78,19 @@ type FlagConfig struct {
 	WebListenAddresses *[]string
 	// WebSystemdSocket enables systemd socket activation listeners.
 	WebSystemdSocket *bool
-	// WebConfigFile points to the TLS and authentication configuration file.
+	// WebConfigFile is the optional path to the TLS config file. Either this or
+	// WebConfig must be set.
+	//
+	// TLS MinVersion and MaxVersion default to TLS 1.2 and TLS 1.3 when unset.
+	// HTTP2 is enabled if the HTTPConfig.HTTP2 field is left unset.
 	WebConfigFile *string
+	// WebConfig is an optional configuration. Either this or WebConfigFile must be set.
+	//
+	// TLS MinVersion and MaxVersion default to TLS 1.2 and TLS 1.3 when unset.
+	// Other fields are used as provided (in particular HTTP/2 is only enabled
+	// when HTTPConfig.HTTP2 is set to true, unlike WebConfigFile which enables
+	// HTTP/2 automatically if left unset).
+	WebConfig *Config
 }
 
 // checkFlags validates that the flag configuration contains the required
@@ -87,8 +99,13 @@ func (c *FlagConfig) checkFlags() error {
 	if c == nil {
 		return ErrMissingFlag
 	}
-	if c.WebConfigFile == nil {
+	// Either a config file path or an injected config must be provided.
+	if c.WebConfigFile == nil && c.WebConfig == nil {
 		return ErrMissingFlag
+	}
+	// Both a config file path and an injected config cannot be provided at the same time.
+	if c.WebConfigFile != nil && c.WebConfig != nil {
+		return ErrConflictingFlagsInConfigs
 	}
 	// Listen addresses are only optional when systemd socket activation is
 	// actually enabled. Checking that WebSystemdSocket is non-nil is not
@@ -167,9 +184,8 @@ func getConfig(configPath string) (*Config, error) {
 	}
 	c := &Config{
 		TLSConfig: TLSConfig{
-			MinVersion:               tls.VersionTLS12,
-			MaxVersion:               tls.VersionTLS13,
-			PreferServerCipherSuites: true,
+			MinVersion: tls.VersionTLS12,
+			MaxVersion: tls.VersionTLS13,
 		},
 		HTTPConfig: HTTPConfig{HTTP2: true},
 	}
@@ -186,6 +202,11 @@ func getTLSConfig(configPath string) (*tls.Config, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if err := ValidateWebConfig(c); err != nil {
+		return nil, err
+	}
+
 	return ConfigToTLSConfig(&c.TLSConfig)
 }
 
@@ -245,11 +266,21 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 		return nil, err
 	}
 
-	// c.PreferServerCipherSuites is deliberately not passed on: the tls.Config
-	// field of that name has had no effect since Go 1.17.
+	// Default the TLS versions without mutating the caller's config. An unset
+	// (zero) MinVersion/MaxVersion means "use the default" rather than crypto/tls'
+	// own zero-value defaults, so resolve them here into the derived tls.Config.
+	minVersion := c.MinVersion
+	if minVersion == 0 {
+		minVersion = tls.VersionTLS12
+	}
+	maxVersion := c.MaxVersion
+	if maxVersion == 0 {
+		maxVersion = tls.VersionTLS13
+	}
+
 	cfg := &tls.Config{
-		MinVersion: (uint16)(c.MinVersion),
-		MaxVersion: (uint16)(c.MaxVersion),
+		MinVersion: (uint16)(minVersion),
+		MaxVersion: (uint16)(maxVersion),
 	}
 
 	cfg.GetCertificate = func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
@@ -393,13 +424,27 @@ func parseVsockPort(address string) (uint32, error) {
 // WebConfigFile in the FlagConfig, TLS or basic auth could be enabled.
 func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
 	logger.Info("Listening on", "address", l.Addr().String())
-	tlsConfigPath := *flags.WebConfigFile
-	if tlsConfigPath == "" {
-		logger.Info("TLS is disabled.", "http2", false, "address", l.Addr().String())
-		return server.Serve(l)
+	var c *Config
+	var err error
+
+	// Determine which configuration to use based on the provided flags.
+	// checkConfigFlags has ensured exactly one of WebConfigFile / WebConfig is set.
+	if flags.WebConfigFile != nil {
+		tlsConfigPath := *flags.WebConfigFile
+		if tlsConfigPath == "" {
+			logger.Info("TLS is disabled.", "http2", false, "address", l.Addr().String())
+			return server.Serve(l)
+		}
+
+		c, err = getConfig(tlsConfigPath)
+		if err != nil {
+			return err
+		}
+	} else {
+		c = flags.WebConfig
 	}
 
-	if err := validateUsers(tlsConfigPath); err != nil {
+	if err := ValidateWebConfig(c); err != nil {
 		return err
 	}
 
@@ -409,11 +454,6 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 		handler = server.Handler
 	}
 
-	c, err := getConfig(tlsConfigPath)
-	if err != nil {
-		return err
-	}
-
 	var limiter *rate.Limiter
 	if c.RateLimiterConfig.Interval != 0 {
 		limiter = rate.NewLimiter(rate.Every(c.RateLimiterConfig.Interval), c.RateLimiterConfig.Burst)
@@ -421,11 +461,11 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 	}
 
 	server.Handler = &webHandler{
-		tlsConfigPath: tlsConfigPath,
-		logger:        logger,
-		handler:       handler,
-		cache:         newCache(),
-		limiter:       limiter,
+		config:  c,
+		logger:  logger,
+		handler: handler,
+		cache:   newCache(),
+		limiter: limiter,
 	}
 
 	config, err := ConfigToTLSConfig(&c.TLSConfig)
@@ -450,12 +490,31 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 	// Set the GetConfigForClient method of the HTTPS server so that the config
 	// and certs are reloaded on new connections.
 	server.TLSConfig.GetConfigForClient = func(*tls.ClientHelloInfo) (*tls.Config, error) {
-		config, err := getTLSConfig(tlsConfigPath)
-		if err != nil {
-			return nil, err
+		var tlsConfig *tls.Config
+		var err error
+		// Determine which configuration to use based on the provided flags.
+		// checkFlags has ensured exactly one of
+		// WebConfigFile / WebConfig is set.
+		if flags.WebConfigFile != nil {
+			tlsConfigPath := *flags.WebConfigFile
+
+			tlsConfig, err = getTLSConfig(tlsConfigPath)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			err = ValidateWebConfig(flags.WebConfig)
+			if err != nil {
+				return nil, err
+			}
+			// Use the provided config.
+			tlsConfig, err = ConfigToTLSConfig(&flags.WebConfig.TLSConfig)
+			if err != nil {
+				return nil, err
+			}
 		}
-		config.NextProtos = tlsNextProtos(server, c.HTTPConfig.HTTP2)
-		return config, nil
+		tlsConfig.NextProtos = tlsNextProtos(server, c.HTTPConfig.HTTP2)
+		return tlsConfig, nil
 	}
 	return server.ServeTLS(l, "", "")
 }
@@ -493,18 +552,28 @@ func Validate(tlsConfigPath string) error {
 	if tlsConfigPath == "" {
 		return nil
 	}
-	if err := validateUsers(tlsConfigPath); err != nil {
-		return err
-	}
 	c, err := getConfig(tlsConfigPath)
 	if err != nil {
 		return err
 	}
-	_, err = ConfigToTLSConfig(&c.TLSConfig)
-	if err == errNoTLSConfig {
+	return ValidateWebConfig(c)
+}
+
+// ValidateWebConfig validates the web configuration, including the TLS config and HTTP headers.
+func ValidateWebConfig(config *Config) error {
+	if config == nil {
 		return nil
 	}
-	return err
+	if err := validateUsers(config); err != nil {
+		return err
+	}
+	if err := validateHeaderConfig(config.HTTPConfig.Header); err != nil {
+		return err
+	}
+	if _, err := ConfigToTLSConfig(&config.TLSConfig); err != nil && err != errNoTLSConfig {
+		return err
+	}
+	return nil
 }
 
 type Cipher uint16
