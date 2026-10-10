@@ -1,0 +1,7 @@
+rate_limit:
+  interval: 1h
+  burst: 1
+http_server_config:
+  headers:
+    X-Frame-Options: deny
+    Strict-Transport-Security: max-age=31536000; includeSubDomains
