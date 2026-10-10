@@ -52,6 +52,7 @@ var (
 		"Invalid Cert or CertPath":     regexp.MustCompile(`missing one of cert or cert_file`),
 		"Invalid Key or KeyPath":       regexp.MustCompile(`missing one of key or key_file`),
 		"ClientCA set without policy":  regexp.MustCompile(`client CA's have been configured without a Client Auth Policy`),
+		"No client CA certificates":    regexp.MustCompile(`no client CA certificates found in client_ca`),
 		"Bad password":                 regexp.MustCompile(`hashedSecret too short to be a bcrypted password`),
 		"Unauthorized":                 regexp.MustCompile(`Unauthorized`),
 		"Forbidden":                    regexp.MustCompile(`Forbidden`),
@@ -170,6 +171,16 @@ func TestYAMLFiles(t *testing.T) {
 			Name:           `invalid config yml (invalid ClientCAs filepath)`,
 			YAMLConfigPath: "testdata/web_config_auth_clientCAs_invalid.bad.yml",
 			ExpectedError:  ErrorMap["No such file"],
+		},
+		{
+			Name:           `invalid config yml (client CA file without certificates)`,
+			YAMLConfigPath: "testdata/web_config_auth_clientCAs_nocerts.bad.yml",
+			ExpectedError:  ErrorMap["No client CA certificates"],
+		},
+		{
+			Name:           `invalid config yml (inline client CA without certificates)`,
+			YAMLConfigPath: "testdata/web_config_auth_clientCAsText_nocerts.bad.yml",
+			ExpectedError:  ErrorMap["No client CA certificates"],
 		},
 		{
 			Name:           `invalid config yml (invalid user list)`,
