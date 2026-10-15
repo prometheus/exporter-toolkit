@@ -33,7 +33,7 @@ func TestCheckFlags(t *testing.T) {
 			name: "missing web config file",
 			flags: &FlagConfig{
 				WebListenAddresses: &[]string{":9100"},
-				WebSystemdSocket:   OfBool(false),
+				WebSystemdSocket:   new(false),
 			},
 			want: ErrMissingFlag,
 		},
@@ -41,15 +41,15 @@ func TestCheckFlags(t *testing.T) {
 			name: "listen addresses only",
 			flags: &FlagConfig{
 				WebListenAddresses: &[]string{":9100"},
-				WebConfigFile:      OfString(""),
+				WebConfigFile:      new(""),
 			},
 			want: nil,
 		},
 		{
 			name: "systemd socket activation enabled without listen addresses",
 			flags: &FlagConfig{
-				WebSystemdSocket: OfBool(true),
-				WebConfigFile:    OfString(""),
+				WebSystemdSocket: new(true),
+				WebConfigFile:    new(""),
 			},
 			want: nil,
 		},
@@ -59,8 +59,8 @@ func TestCheckFlags(t *testing.T) {
 		{
 			name: "systemd socket activation disabled with nil listen addresses",
 			flags: &FlagConfig{
-				WebSystemdSocket: OfBool(false),
-				WebConfigFile:    OfString(""),
+				WebSystemdSocket: new(false),
+				WebConfigFile:    new(""),
 			},
 			want: ErrNoListeners,
 		},
@@ -68,15 +68,15 @@ func TestCheckFlags(t *testing.T) {
 			name: "systemd socket activation disabled with empty listen addresses",
 			flags: &FlagConfig{
 				WebListenAddresses: &[]string{},
-				WebSystemdSocket:   OfBool(false),
-				WebConfigFile:      OfString(""),
+				WebSystemdSocket:   new(false),
+				WebConfigFile:      new(""),
 			},
 			want: ErrNoListeners,
 		},
 		{
 			name: "no listeners configured at all",
 			flags: &FlagConfig{
-				WebConfigFile: OfString(""),
+				WebConfigFile: new(""),
 			},
 			want: ErrNoListeners,
 		},
@@ -93,8 +93,8 @@ func TestCheckFlags(t *testing.T) {
 // listener configuration instead of panicking on a nil WebListenAddresses.
 func TestListenAndServeNoListeners(t *testing.T) {
 	flags := &FlagConfig{
-		WebSystemdSocket: OfBool(false),
-		WebConfigFile:    OfString(""),
+		WebSystemdSocket: new(false),
+		WebConfigFile:    new(""),
 	}
 	if err := ListenAndServe(nil, flags, testlogger); !errors.Is(err, ErrNoListeners) {
 		t.Fatalf("ListenAndServe() = %v, want %v", err, ErrNoListeners)

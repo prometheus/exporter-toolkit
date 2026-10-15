@@ -29,14 +29,6 @@ import (
 	"time"
 )
 
-// Helpers for literal FlagConfig
-func OfBool(i bool) *bool {
-	return &i
-}
-func OfString(i string) *string {
-	return &i
-}
-
 var (
 	port       = getPort()
 	testlogger = slog.New(slog.NewTextHandler(os.Stdout, nil))
@@ -418,8 +410,8 @@ func TestConfigReloading(t *testing.T) {
 		}()
 		flagsBadYAMLPath := FlagConfig{
 			WebListenAddresses: &([]string{port}),
-			WebSystemdSocket:   OfBool(false),
-			WebConfigFile:      OfString(badYAMLPath),
+			WebSystemdSocket:   new(false),
+			WebConfigFile:      new(badYAMLPath),
 		}
 		err := Listen(server, &flagsBadYAMLPath, testlogger)
 		recordConnectionError(err)
@@ -492,7 +484,7 @@ func (test *TestInputs) Test(t *testing.T) {
 		}()
 		flags := FlagConfig{
 			WebListenAddresses: &([]string{port}),
-			WebSystemdSocket:   OfBool(false),
+			WebSystemdSocket:   new(false),
 			WebConfigFile:      &test.YAMLConfigPath,
 		}
 		err := ListenAndServe(server, &flags, testlogger)
