@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"sync/atomic"
 	"time"
@@ -337,6 +338,11 @@ func (t *Runner) newServer(metricsHandler http.Handler) (*http.Server, error) {
 			return nil, err
 		}
 		mux.Handle("/", landingPage)
+		mux.HandleFunc("GET /debug/pprof/", pprof.Index)
+		mux.HandleFunc("GET /debug/pprof/cmdline", pprof.Cmdline)
+		mux.HandleFunc("GET /debug/pprof/profile", pprof.Profile)
+		mux.HandleFunc("GET /debug/pprof/symbol", pprof.Symbol)
+		mux.HandleFunc("GET /debug/pprof/trace", pprof.Trace)
 	}
 
 	readHeaderTimeout := defaultReadHeaderTimeout
