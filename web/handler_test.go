@@ -42,8 +42,8 @@ func TestBasicAuthCache(t *testing.T) {
 	go func() {
 		flags := FlagConfig{
 			WebListenAddresses: &([]string{port}),
-			WebSystemdSocket:   OfBool(false),
-			WebConfigFile:      OfString("testdata/web_config_users_noTLS.good.yml"),
+			WebSystemdSocket:   new(false),
+			WebConfigFile:      new("testdata/web_config_users_noTLS.good.yml"),
 		}
 		ListenAndServe(server, &flags, testlogger)
 		close(done)
@@ -109,8 +109,8 @@ func TestBasicAuthWithFakepassword(t *testing.T) {
 	go func() {
 		flags := FlagConfig{
 			WebListenAddresses: &([]string{port}),
-			WebSystemdSocket:   OfBool(false),
-			WebConfigFile:      OfString("testdata/web_config_users_noTLS.good.yml"),
+			WebSystemdSocket:   new(false),
+			WebConfigFile:      new("testdata/web_config_users_noTLS.good.yml"),
 		}
 		ListenAndServe(server, &flags, testlogger)
 		close(done)
@@ -159,8 +159,8 @@ func TestByPassBasicAuthVuln(t *testing.T) {
 	go func() {
 		flags := FlagConfig{
 			WebListenAddresses: &([]string{port}),
-			WebSystemdSocket:   OfBool(false),
-			WebConfigFile:      OfString("testdata/web_config_users_noTLS.good.yml"),
+			WebSystemdSocket:   new(false),
+			WebConfigFile:      new("testdata/web_config_users_noTLS.good.yml"),
 		}
 		ListenAndServe(server, &flags, testlogger)
 		close(done)
@@ -209,8 +209,8 @@ func TestHTTPHeaders(t *testing.T) {
 	go func() {
 		flags := FlagConfig{
 			WebListenAddresses: &([]string{port}),
-			WebSystemdSocket:   OfBool(false),
-			WebConfigFile:      OfString("testdata/web_config_headers.good.yml"),
+			WebSystemdSocket:   new(false),
+			WebConfigFile:      new("testdata/web_config_headers.good.yml"),
 		}
 		ListenAndServe(server, &flags, testlogger)
 		close(done)
