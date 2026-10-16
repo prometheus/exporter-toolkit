@@ -89,9 +89,21 @@ tls_server_config:
   # the underlying setting has had no effect since then.
   [ prefer_server_cipher_suites: <bool> | default = true ]
 
-  # Elliptic curves that will be used in an ECDHE handshake, in preference
+  # Elliptic curves and key exchange mechanisms that will be used in a TLS handshake, in preference
   # order. Available curves are documented in the go documentation:
   # https://golang.org/pkg/crypto/tls/#CurveID
+  #
+  # In TLS 1.3, this registry was extended to "Named Groups" (RFC 8446,
+  # Section 4.2.7) and now also covers hybrid post-quantum KEMs.
+  #
+  # Available values:
+  #   * CurveP256
+  #   * CurveP384
+  #   * CurveP521
+  #   * X25519
+  #   * X25519MLKEM768 (requires Go 1.24+)
+  #   * SecP256r1MLKEM768 (requires Go 1.26+)
+  #   * SecP384r1MLKEM1024 (requires Go 1.26+)
   [ curve_preferences:
     [ - <string> ] ]
 
