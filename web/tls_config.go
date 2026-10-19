@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-systemd/v22/activation"
+	"github.com/coreos/go-systemd/v22/daemon"
 	"github.com/mdlayher/vsock"
 	config_util "github.com/prometheus/common/config"
 	"go.yaml.in/yaml/v2"
@@ -313,13 +314,88 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 	return cfg, nil
 }
 
+// setupServer validates and configures authentication and TLS settings on the
+// server based on the configuration file in FlagConfig.
+func setupServer(server *http.Server, flags *FlagConfig, logger *slog.Logger) (useTLS bool, http2 bool, err error) {
+	if flags == nil || flags.WebConfigFile == nil || *flags.WebConfigFile == "" {
+		return false, false, nil
+	}
+
+	tlsConfigPath := *flags.WebConfigFile
+	if err := validateUsers(tlsConfigPath); err != nil {
+		return false, false, err
+	}
+
+	// Setup basic authentication.
+	var handler http.Handler = http.DefaultServeMux
+	if server.Handler != nil {
+		handler = server.Handler
+	}
+
+	c, err := getConfig(tlsConfigPath)
+	if err != nil {
+		return false, false, err
+	}
+
+	var limiter *rate.Limiter
+	if c.RateLimiterConfig.Interval != 0 {
+		limiter = rate.NewLimiter(rate.Every(c.RateLimiterConfig.Interval), c.RateLimiterConfig.Burst)
+		logger.Info("Rate Limiter is enabled.", "burst", c.RateLimiterConfig.Burst, "interval", c.RateLimiterConfig.Interval)
+	}
+
+	server.Handler = &webHandler{
+		tlsConfigPath: tlsConfigPath,
+		logger:        logger,
+		handler:       handler,
+		cache:         newCache(),
+		limiter:       limiter,
+	}
+
+	config, err := ConfigToTLSConfig(&c.TLSConfig)
+	switch err {
+	case nil:
+		if !c.HTTPConfig.HTTP2 {
+			server.TLSNextProto = make(map[string]func(*http.Server, *tls.Conn, http.Handler))
+		}
+		server.TLSConfig = config
+
+		// Set the GetConfigForClient method of the HTTPS server so that the config
+		// and certs are reloaded on new connections.
+		server.TLSConfig.GetConfigForClient = func(*tls.ClientHelloInfo) (*tls.Config, error) {
+			config, err := getTLSConfig(tlsConfigPath)
+			if err != nil {
+				return nil, err
+			}
+			config.NextProtos = tlsNextProtos(server, c.HTTPConfig.HTTP2)
+			return config, nil
+		}
+		return true, c.HTTPConfig.HTTP2, nil
+	case errNoTLSConfig:
+		return false, false, nil
+	default:
+		return false, false, err
+	}
+}
+
 // ServeMultiple starts the server on the given listeners. The FlagConfig is
 // also passed on to Serve.
 func ServeMultiple(listeners []net.Listener, server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
+	useTLS, http2, err := setupServer(server, flags, logger)
+	if err != nil {
+		return err
+	}
+	_, _ = daemon.SdNotify(false, daemon.SdNotifyReady)
+
 	errs := new(errgroup.Group)
 	for _, l := range listeners {
 		errs.Go(func() error {
-			return Serve(l, server, flags, logger)
+			logger.Info("Listening on", "address", l.Addr().String())
+			if useTLS {
+				logger.Info("TLS is enabled.", "http2", http2, "address", l.Addr().String())
+				return server.ServeTLS(l, "", "")
+			}
+			logger.Info("TLS is disabled.", "http2", false, "address", l.Addr().String())
+			return server.Serve(l)
 		})
 	}
 	return errs.Wait()
@@ -389,75 +465,10 @@ func parseVsockPort(address string) (uint32, error) {
 	return uint32(port), nil
 }
 
-// Server starts the server on the given listener. Based on the file path
+// Serve starts the server on the given listener. Based on the file path
 // WebConfigFile in the FlagConfig, TLS or basic auth could be enabled.
 func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
-	logger.Info("Listening on", "address", l.Addr().String())
-	tlsConfigPath := *flags.WebConfigFile
-	if tlsConfigPath == "" {
-		logger.Info("TLS is disabled.", "http2", false, "address", l.Addr().String())
-		return server.Serve(l)
-	}
-
-	if err := validateUsers(tlsConfigPath); err != nil {
-		return err
-	}
-
-	// Setup basic authentication.
-	var handler http.Handler = http.DefaultServeMux
-	if server.Handler != nil {
-		handler = server.Handler
-	}
-
-	c, err := getConfig(tlsConfigPath)
-	if err != nil {
-		return err
-	}
-
-	var limiter *rate.Limiter
-	if c.RateLimiterConfig.Interval != 0 {
-		limiter = rate.NewLimiter(rate.Every(c.RateLimiterConfig.Interval), c.RateLimiterConfig.Burst)
-		logger.Info("Rate Limiter is enabled.", "burst", c.RateLimiterConfig.Burst, "interval", c.RateLimiterConfig.Interval)
-	}
-
-	server.Handler = &webHandler{
-		tlsConfigPath: tlsConfigPath,
-		logger:        logger,
-		handler:       handler,
-		cache:         newCache(),
-		limiter:       limiter,
-	}
-
-	config, err := ConfigToTLSConfig(&c.TLSConfig)
-	switch err {
-	case nil:
-		if !c.HTTPConfig.HTTP2 {
-			server.TLSNextProto = make(map[string]func(*http.Server, *tls.Conn, http.Handler))
-		}
-		// Valid TLS config.
-		logger.Info("TLS is enabled.", "http2", c.HTTPConfig.HTTP2, "address", l.Addr().String())
-	case errNoTLSConfig:
-		// No TLS config, back to plain HTTP.
-		logger.Info("TLS is disabled.", "http2", false, "address", l.Addr().String())
-		return server.Serve(l)
-	default:
-		// Invalid TLS config.
-		return err
-	}
-
-	server.TLSConfig = config
-
-	// Set the GetConfigForClient method of the HTTPS server so that the config
-	// and certs are reloaded on new connections.
-	server.TLSConfig.GetConfigForClient = func(*tls.ClientHelloInfo) (*tls.Config, error) {
-		config, err := getTLSConfig(tlsConfigPath)
-		if err != nil {
-			return nil, err
-		}
-		config.NextProtos = tlsNextProtos(server, c.HTTPConfig.HTTP2)
-		return config, nil
-	}
-	return server.ServeTLS(l, "", "")
+	return ServeMultiple([]net.Listener{l}, server, flags, logger)
 }
 
 // tlsNextProtos preserves the server's ALPN policy on reloaded TLS configs.
