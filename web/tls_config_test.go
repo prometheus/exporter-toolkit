@@ -840,15 +840,11 @@ func TestServeErrorLog(t *testing.T) {
 	}
 }
 
-// TestServeMultipleWithoutListeners checks that ServeMultiple leaves the server
-// alone when there is nothing to serve.
+// TestServeMultipleWithoutListeners checks that ServeMultiple returns without
+// touching the server when there is nothing to serve.
 func TestServeMultipleWithoutListeners(t *testing.T) {
-	server := &http.Server{}
-	if err := ServeMultiple(nil, server, nil, testlogger); err != nil {
+	if err := ServeMultiple(nil, nil, nil, testlogger); err != nil {
 		t.Fatal(err)
-	}
-	if server.ErrorLog != nil {
-		t.Error("ServeMultiple without listeners set server.ErrorLog")
 	}
 }
 

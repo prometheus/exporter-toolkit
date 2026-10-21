@@ -316,10 +316,11 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 // ServeMultiple starts the server on the given listeners. The FlagConfig is
 // also passed on to Serve.
 func ServeMultiple(listeners []net.Listener, server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
-	// Set the error log once, before the Serve goroutines share the server.
-	if len(listeners) > 0 {
-		setErrorLog(server, logger)
+	if len(listeners) == 0 {
+		return nil
 	}
+	// Set the error log once, before the Serve goroutines share the server.
+	setErrorLog(server, logger)
 	errs := new(errgroup.Group)
 	for _, l := range listeners {
 		errs.Go(func() error {
@@ -398,8 +399,8 @@ func parseVsockPort(address string) (uint32, error) {
 //
 // If server.ErrorLog is nil, Serve sets it so that errors logged by the HTTP
 // server itself, such as TLS handshake errors, go to logger at error level.
-// Serve changes the server, so do not call it concurrently for the same
-// server; use ServeMultiple to serve several listeners with one server.
+// Callers that pass the same server to Serve from several goroutines should
+// set server.ErrorLog before starting them, as ServeMultiple does.
 func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
 	logger.Info("Listening on", "address", l.Addr().String())
 	setErrorLog(server, logger)
