@@ -342,3 +342,28 @@ func TestNewServerReadHeaderTimeoutClosesStalledConnection(t *testing.T) {
 		t.Fatal("server did not close the stalled connection within 5s; ReadHeaderTimeout not effective")
 	}
 }
+
+// TestNewServerHealthEndpoints checks the probes answer without touching the
+// metrics handler.
+func TestNewServerHealthEndpoints(t *testing.T) {
+	server := runnerForFactory(t, func(*Bootstrap) (http.Handler, error) {
+		return http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			t.Error("metrics handler must not be called by a probe")
+		}), nil
+	})
+
+	for _, tc := range []struct {
+		method, path string
+		want         int
+	}{
+		{http.MethodGet, "/-/healthy", http.StatusOK},
+		{http.MethodHead, "/-/healthy", http.StatusOK},
+		{http.MethodGet, "/-/ready", http.StatusOK},
+	} {
+		rec := httptest.NewRecorder()
+		server.Handler.ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, nil))
+		if rec.Code != tc.want {
+			t.Errorf("%s %s: got %d, want %d", tc.method, tc.path, rec.Code, tc.want)
+		}
+	}
+}

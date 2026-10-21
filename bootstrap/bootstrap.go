@@ -327,6 +327,9 @@ func (t *Runner) newServer(metricsHandler http.Handler) (*http.Server, error) {
 		}
 	}
 
+	mux.HandleFunc("GET /-/healthy", okHandler)
+	mux.HandleFunc("GET /-/ready", okHandler)
+
 	if metricsPath != "/" && !rootOverridden {
 		landingConfig := t.LandingConfig
 		landingConfig.Links = append(landingConfig.Links, web.LandingLinks{
@@ -354,6 +357,12 @@ func (t *Runner) newServer(metricsHandler http.Handler) (*http.Server, error) {
 		Handler:           mux,
 		ReadHeaderTimeout: readHeaderTimeout,
 	}, nil
+}
+
+// okHandler answers liveness and readiness probes without touching the
+// metrics handler.
+func okHandler(w http.ResponseWriter, _ *http.Request) {
+	_, _ = w.Write([]byte("OK\n"))
 }
 
 func (t *Runner) defaultLandingConfig() web.LandingConfig {
