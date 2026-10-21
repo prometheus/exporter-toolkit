@@ -171,29 +171,6 @@ func TestNewServerRegistersFactoryRoutes(t *testing.T) {
 	}
 }
 
-func TestNewServerRejectsMetricsPathOverride(t *testing.T) {
-	tk := New(Config{
-		App:            kingpin.New("test", ""),
-		DefaultAddress: ":9100",
-		Logger:         promslog.NewNopLogger(),
-		MetricsHandlerFactory: func(b *Bootstrap) (http.Handler, error) {
-			b.HandleFunc("/metrics", func(http.ResponseWriter, *http.Request) {})
-			return http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), nil
-		},
-	})
-
-	if err := tk.parse([]string{"--web.listen-address=:9100"}); err != nil {
-		t.Fatalf("unexpected parse error: %v", err)
-	}
-	handler, err := tk.resolveMetricsHandler()
-	if err != nil {
-		t.Fatalf("unexpected handler resolution error: %v", err)
-	}
-	if _, err := tk.newServer(handler); !errors.Is(err, errReservedMetricsPath) {
-		t.Fatalf("unexpected error: got %v, want %v", err, errReservedMetricsPath)
-	}
-}
-
 func TestNewServerAllowsRootRouteOverride(t *testing.T) {
 	tk := New(Config{
 		App:            kingpin.New("test", ""),
@@ -364,6 +341,32 @@ func TestNewServerHealthEndpoints(t *testing.T) {
 		server.Handler.ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, nil))
 		if rec.Code != tc.want {
 			t.Errorf("%s %s: got %d, want %d", tc.method, tc.path, rec.Code, tc.want)
+		}
+	}
+}
+
+// TestNewServerRejectsReservedRoutes checks a caller route can not take a route
+// bootstrap serves itself.
+func TestNewServerRejectsReservedRoutes(t *testing.T) {
+	for _, pattern := range []string{"/metrics", healthyPattern, readyPattern} {
+		tk := New(Config{
+			App:            kingpin.New("test", ""),
+			DefaultAddress: ":9100",
+			Logger:         promslog.NewNopLogger(),
+			MetricsHandlerFactory: func(b *Bootstrap) (http.Handler, error) {
+				b.HandleFunc(pattern, func(http.ResponseWriter, *http.Request) {})
+				return http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), nil
+			},
+		})
+		if err := tk.parse(nil); err != nil {
+			t.Fatalf("unexpected parse error: %v", err)
+		}
+		handler, err := tk.resolveMetricsHandler()
+		if err != nil {
+			t.Fatalf("unexpected handler resolution error: %v", err)
+		}
+		if _, err := tk.newServer(handler); !errors.Is(err, errReservedPath) {
+			t.Errorf("%s: unexpected error: got %v, want %v", pattern, err, errReservedPath)
 		}
 	}
 }
