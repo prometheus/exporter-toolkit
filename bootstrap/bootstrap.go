@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -45,10 +46,17 @@ var (
 	errEmptyMetricsPath = errors.New("metrics path must not be empty")
 	// errNegativeMaxRequests is returned when max requests is configured below zero.
 	errNegativeMaxRequests = errors.New("web max requests must be greater than or equal to zero")
-	// errReservedMetricsPath is returned when a caller-registered route
-	// conflicts with --web.telemetry-path. The root path may be overridden
-	// by a caller-registered route, but the metrics path may not.
-	errReservedMetricsPath = errors.New("route pattern is reserved for the metrics handler")
+	// errReservedPath is returned when a caller-registered route conflicts
+	// with a route bootstrap serves itself. The root path may be overridden
+	// by a caller-registered route, but the reserved routes may not.
+	errReservedPath = errors.New("route pattern is reserved")
+)
+
+// Liveness and readiness probes. They answer OK whenever the server is up,
+// since exporters fetch data at scrape time and have no state to load.
+const (
+	healthyPattern = "GET /-/healthy"
+	readyPattern   = "GET /-/ready"
 )
 
 // defaultReadHeaderTimeout applies when Config.ReadHeaderTimeout is left unset.
@@ -122,7 +130,8 @@ type route struct {
 
 // Handle registers an additional handler on the exporter mux. Handlers
 // registered from a MetricsHandlerFactory are served alongside the metrics
-// endpoint and the landing page. Wrap handler in Bootstrap.MaxRequestsHandler
+// endpoint and the landing page. The metrics path, GET /-/healthy and
+// GET /-/ready are reserved. Wrap handler in Bootstrap.MaxRequestsHandler
 // to bound it by --web.max-requests.
 func (b *Bootstrap) Handle(pattern string, handler http.Handler) {
 	b.routes = append(b.routes, route{pattern: pattern, handler: handler})
@@ -314,11 +323,12 @@ func (t *Runner) newServer(metricsHandler http.Handler) (*http.Server, error) {
 	metricsPath := t.MetricsPath
 	mux.Handle(metricsPath, maxRequestsHandler(metricsHandler, t.MaxRequests, t.Logger))
 
+	reserved := []string{metricsPath, healthyPattern, readyPattern}
 	rootOverridden := false
 	if t.bootstrap != nil {
 		for _, r := range t.bootstrap.routes {
-			if r.pattern == metricsPath {
-				return nil, fmt.Errorf("%w: %q", errReservedMetricsPath, r.pattern)
+			if slices.Contains(reserved, r.pattern) {
+				return nil, fmt.Errorf("%w: %q", errReservedPath, r.pattern)
 			}
 			if r.pattern == "/" {
 				rootOverridden = true
@@ -326,6 +336,9 @@ func (t *Runner) newServer(metricsHandler http.Handler) (*http.Server, error) {
 			mux.Handle(r.pattern, r.handler)
 		}
 	}
+
+	mux.HandleFunc(healthyPattern, okHandler)
+	mux.HandleFunc(readyPattern, okHandler)
 
 	if metricsPath != "/" && !rootOverridden {
 		landingConfig := t.LandingConfig
@@ -354,6 +367,12 @@ func (t *Runner) newServer(metricsHandler http.Handler) (*http.Server, error) {
 		Handler:           mux,
 		ReadHeaderTimeout: readHeaderTimeout,
 	}, nil
+}
+
+// okHandler answers liveness and readiness probes without touching the
+// metrics handler.
+func okHandler(w http.ResponseWriter, _ *http.Request) {
+	_, _ = w.Write([]byte("OK\n"))
 }
 
 func (t *Runner) defaultLandingConfig() web.LandingConfig {
