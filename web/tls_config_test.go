@@ -826,14 +826,14 @@ func TestServeErrorLog(t *testing.T) {
 			}
 
 			// Every line from the logger passed to Serve is JSON, and the
-			// handshake error is logged at error level.
+			// handshake error is logged at warn level.
 			for line := range strings.Lines(slogOut.String()) {
 				var record struct{ Level, Msg string }
 				if err := json.Unmarshal([]byte(line), &record); err != nil {
 					t.Fatalf("invalid JSON log line %q: %v", line, err)
 				}
-				if strings.HasPrefix(record.Msg, msg) && record.Level != slog.LevelError.String() {
-					t.Errorf("%q logged at level %s, want %s", msg, record.Level, slog.LevelError)
+				if strings.HasPrefix(record.Msg, msg) && record.Level != slog.LevelWarn.String() {
+					t.Errorf("%q logged at level %s, want %s", msg, record.Level, slog.LevelWarn)
 				}
 			}
 		})
