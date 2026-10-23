@@ -17,6 +17,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -42,15 +44,13 @@ type Report struct {
 // Report returns the current state of every registered collector, sorted by
 // name.
 func (r *Registry[C, Cfg]) Report() Report {
-	descs := r.Descriptors()
-	enabled := make(map[string]bool)
-	for _, name := range r.Enabled() {
-		enabled[name] = true
-	}
+	r.mtx.Lock()
+	defer r.mtx.Unlock()
 
-	out := Report{Namespace: r.namespace, Collectors: make([]State, 0, len(descs))}
-	for _, d := range descs {
-		out.Collectors = append(out.Collectors, State{Descriptor: d, Enabled: enabled[d.Name]})
+	out := Report{Namespace: r.namespace, Collectors: make([]State, 0, len(r.entries))}
+	for _, name := range slices.Sorted(maps.Keys(r.entries)) {
+		e := r.entries[name]
+		out.Collectors = append(out.Collectors, State{Descriptor: e.desc, Enabled: e.enabled})
 	}
 	return out
 }
@@ -76,11 +76,6 @@ func (r *Registry[C, Cfg]) WriteMarkdown(w io.Writer) error {
 
 	b.WriteString("| Collector | Default | Notes |\n|---|---|---|\n")
 	for _, d := range r.Descriptors() {
-		state := "disabled"
-		if d.DefaultEnabled {
-			state = "enabled"
-		}
-
 		notes := d.Help
 		if len(d.Requires) > 0 {
 			req := "requires " + strings.Join(d.Requires, ", ")
@@ -91,7 +86,7 @@ func (r *Registry[C, Cfg]) WriteMarkdown(w io.Writer) error {
 			}
 		}
 
-		fmt.Fprintf(&b, "| `%s` | %s | %s |\n", d.Name, state, notes)
+		fmt.Fprintf(&b, "| `%s` | %s | %s |\n", d.Name, d.defaultState(), notes)
 	}
 
 	_, err := io.WriteString(w, b.String())
@@ -173,7 +168,6 @@ func (s *ScrapeReporter) Describe(ch chan<- *prometheus.Desc) {
 }
 
 // Report emits the duration and success metrics for one collector run.
-// success is derived from err being nil.
 func (s *ScrapeReporter) Report(ch chan<- prometheus.Metric, name string, duration time.Duration, err error) {
 	success := 1.0
 	if err != nil {
