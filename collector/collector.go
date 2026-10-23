@@ -32,6 +32,7 @@ import (
 	"maps"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/alecthomas/kingpin/v2"
@@ -125,6 +126,9 @@ func (r *Registry[C, Cfg]) Register(d Descriptor, factory func(Cfg) (C, error)) 
 	if r.flagsAdded {
 		panic(fmt.Sprintf("collector: %q registered after AddFlags", d.Name))
 	}
+	if factory == nil {
+		panic(fmt.Sprintf("collector: %q registered with a nil factory", d.Name))
+	}
 
 	r.entries[d.Name] = &entry[C, Cfg]{desc: d, factory: factory, enabled: d.DefaultEnabled}
 }
@@ -136,11 +140,14 @@ func (r *Registry[C, Cfg]) AddFlags(app flagGroup) {
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
 
+	if r.flagsAdded {
+		panic("collector: AddFlags called twice")
+	}
 	r.flagsAdded = true
 	for _, name := range slices.Sorted(maps.Keys(r.entries)) {
 		e := r.entries[name]
 
-		help := e.desc.Help
+		help := strings.TrimSuffix(e.desc.Help, ".")
 		if help == "" {
 			help = fmt.Sprintf("Enable the %s collector", name)
 		}
@@ -184,7 +191,8 @@ func (r *Registry[C, Cfg]) DisableDefaults() {
 // SetEnabled overrides a collector's state programmatically and marks it as
 // explicitly chosen, so a later DisableDefaults will not clear it. It exists
 // for exporters that resolve collector state from a config file as well as
-// from flags.
+// from flags. Call it after parsing flags, because parsing writes the flag
+// defaults over any earlier value.
 func (r *Registry[C, Cfg]) SetEnabled(name string, enabled bool) error {
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
@@ -221,7 +229,7 @@ func (r *Registry[C, Cfg]) Descriptors() []Descriptor {
 }
 
 // Enabled returns the names of the collectors that will run, sorted. This is
-// the runtime question — what is this process actually scraping — answered the
+// the runtime question (what is this process actually scraping?) answered the
 // same way for every exporter.
 func (r *Registry[C, Cfg]) Enabled() []string {
 	r.mtx.Lock()
@@ -238,11 +246,11 @@ func (r *Registry[C, Cfg]) Enabled() []string {
 }
 
 // Build instantiates the enabled collectors and returns them keyed by name.
-// Instances are cached, so repeated calls reuse collectors that hold state or
-// open handles.
+// Instances are cached so collectors keep state and open handles across calls,
+// which means cfgFor only applies to a collector's first build.
 //
 // cfgFor produces the config for one collector. It takes the collector name
-// because exporters routinely specialize per collector — both node_exporter and
+// because exporters routinely specialize per collector: both node_exporter and
 // postgres_exporter pass a logger scoped with `logger.With("collector", name)`.
 // Use StaticConfig if the config does not vary.
 //

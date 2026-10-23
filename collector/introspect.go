@@ -86,7 +86,7 @@ func (r *Registry[C, Cfg]) WriteMarkdown(w io.Writer) error {
 			}
 		}
 
-		fmt.Fprintf(&b, "| `%s` | %s | %s |\n", d.Name, d.defaultState(), notes)
+		fmt.Fprintf(&b, "| `%s` | %s | %s |\n", d.Name, d.defaultState(), strings.ReplaceAll(notes, "|", `\|`))
 	}
 
 	_, err := io.WriteString(w, b.String())
@@ -134,7 +134,7 @@ func (e *enabledMetrics) Collect(ch chan<- prometheus.Metric) {
 
 // ScrapeReporter emits the per-collector scrape duration and success metrics
 // that exporters currently redefine identically. Exporters keep their own
-// Collect loop — only the bookkeeping is shared.
+// Collect loop; only the bookkeeping is shared.
 type ScrapeReporter struct {
 	durationDesc *prometheus.Desc
 	successDesc  *prometheus.Desc
