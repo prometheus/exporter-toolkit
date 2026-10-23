@@ -61,6 +61,10 @@ tls_server_config:
   # which is an exact match to an entry in this list, else terminate the
   # connection. SAN match can be one or multiple of the following: DNS,
   # IP, e-mail, or URI address from https://pkg.go.dev/crypto/x509#Certificate.
+  #
+  # NOTE: This requires client_auth_type to be either RequireAnyClientCert or
+  # RequireAndVerifyClientCert. The other client auth types let a client
+  # connect without sending a certificate, leaving no SAN to match against.
   [ client_allowed_sans:
     [ - <string> ] ]
 
