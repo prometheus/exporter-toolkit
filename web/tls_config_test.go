@@ -14,16 +14,20 @@
 package web
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"regexp"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -748,4 +752,117 @@ func TestTLSConfigIsEnabled(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestServeErrorLog checks that errors logged by net/http itself, such as TLS
+// handshake failures, go to the logger passed to Serve instead of the log
+// package's default logger, and that an ErrorLog set on the server is kept.
+func TestServeErrorLog(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		serverErrorLog bool
+	}{
+		{name: "logger passed to Serve"},
+		{name: "ErrorLog set on the server", serverErrorLog: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var slogOut, serverOut, defaultOut syncBuffer
+			defaultWriter := log.Writer()
+			log.SetOutput(&defaultOut)
+			t.Cleanup(func() { log.SetOutput(defaultWriter) })
+
+			server := &http.Server{}
+			want := &slogOut
+			if tc.serverErrorLog {
+				server.ErrorLog = log.New(&serverOut, "", 0)
+				want = &serverOut
+			}
+			listener, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			configPath := "testdata/web_config_noAuth.good.yml"
+			logger := slog.New(slog.NewJSONHandler(&slogOut, nil))
+			done := make(chan error, 1)
+			go func() {
+				done <- Serve(listener, server, &FlagConfig{WebConfigFile: &configPath}, logger)
+			}()
+			t.Cleanup(func() {
+				server.Close()
+				listener.Close()
+				select {
+				case err := <-done:
+					if err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, net.ErrClosed) {
+						t.Errorf("Serve: %v", err)
+					}
+				case <-time.After(5 * time.Second):
+					t.Error("Serve did not stop")
+				}
+			})
+
+			// Fail the handshake like a client that does not trust the
+			// server certificate.
+			conn, err := net.Dial("tcp", listener.Addr().String())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer conn.Close()
+			conn.SetDeadline(time.Now().Add(5 * time.Second))
+			if err := tls.Client(conn, &tls.Config{RootCAs: x509.NewCertPool(), ServerName: "localhost"}).Handshake(); err == nil {
+				t.Fatal("TLS handshake with an untrusted server certificate succeeded")
+			}
+
+			// The server logs the error from its connection goroutine.
+			msg := "http: TLS handshake error from " + conn.LocalAddr().String()
+			deadline := time.Now().Add(5 * time.Second)
+			for !strings.Contains(want.String(), msg) {
+				if time.Now().After(deadline) {
+					t.Fatalf("%q not logged to the expected logger; slog: %q, server.ErrorLog: %q, log package: %q", msg, slogOut.String(), serverOut.String(), defaultOut.String())
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			if n := strings.Count(slogOut.String()+serverOut.String()+defaultOut.String(), msg); n != 1 {
+				t.Errorf("%q logged %d times, want once", msg, n)
+			}
+
+			// Every line from the logger passed to Serve is JSON, and the
+			// handshake error is logged at warn level.
+			for line := range strings.Lines(slogOut.String()) {
+				var record struct{ Level, Msg string }
+				if err := json.Unmarshal([]byte(line), &record); err != nil {
+					t.Fatalf("invalid JSON log line %q: %v", line, err)
+				}
+				if strings.HasPrefix(record.Msg, msg) && record.Level != slog.LevelWarn.String() {
+					t.Errorf("%q logged at level %s, want %s", msg, record.Level, slog.LevelWarn)
+				}
+			}
+		})
+	}
+}
+
+// TestServeMultipleWithoutListeners checks that ServeMultiple returns an error
+// without touching the server when there is nothing to serve.
+func TestServeMultipleWithoutListeners(t *testing.T) {
+	if err := ServeMultiple(nil, nil, nil, testlogger); err == nil {
+		t.Fatal("expected an error when no listeners are provided")
+	}
+}
+
+// syncBuffer is a bytes.Buffer that is safe to read while a server goroutine
+// writes to it.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }

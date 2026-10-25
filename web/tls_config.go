@@ -316,6 +316,10 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 // ServeMultiple starts the server on the given listeners. The FlagConfig is
 // also passed on to Serve.
 func ServeMultiple(listeners []net.Listener, server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
+	if len(listeners) == 0 {
+		return errors.New("no listeners provided")
+	}
+	setErrorLog(server, logger)
 	errs := new(errgroup.Group)
 	for _, l := range listeners {
 		errs.Go(func() error {
@@ -391,8 +395,14 @@ func parseVsockPort(address string) (uint32, error) {
 
 // Server starts the server on the given listener. Based on the file path
 // WebConfigFile in the FlagConfig, TLS or basic auth could be enabled.
+//
+// If server.ErrorLog is nil, Serve sets it so that errors logged by the HTTP
+// server itself, such as TLS handshake errors, go to logger at warn level.
+// Callers that pass the same server to Serve from several goroutines should
+// set server.ErrorLog before starting them, as ServeMultiple does.
 func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
 	logger.Info("Listening on", "address", l.Addr().String())
+	setErrorLog(server, logger)
 	tlsConfigPath := *flags.WebConfigFile
 	if tlsConfigPath == "" {
 		logger.Info("TLS is disabled.", "http2", false, "address", l.Addr().String())
@@ -458,6 +468,14 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 		return config, nil
 	}
 	return server.ServeTLS(l, "", "")
+}
+
+// setErrorLog sends the errors that net/http logs through server.ErrorLog to
+// the new logger if no existing server.ErrorLog is set.
+func setErrorLog(server *http.Server, logger *slog.Logger) {
+	if server.ErrorLog == nil {
+		server.ErrorLog = slog.NewLogLogger(logger.Handler(), slog.LevelWarn)
+	}
 }
 
 // tlsNextProtos preserves the server's ALPN policy on reloaded TLS configs.
