@@ -317,9 +317,8 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 // also passed on to Serve.
 func ServeMultiple(listeners []net.Listener, server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
 	if len(listeners) == 0 {
-		return nil
+		return errors.New("no listeners provided")
 	}
-	// Set the error log once, before the Serve goroutines share the server.
 	setErrorLog(server, logger)
 	errs := new(errgroup.Group)
 	for _, l := range listeners {
@@ -472,8 +471,7 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 }
 
 // setErrorLog sends the errors that net/http logs through server.ErrorLog to
-// logger, so that they use the same handler and format as the other log lines.
-// An ErrorLog set by the caller is kept.
+// the new logger if no existing server.ErrorLog is set.
 func setErrorLog(server *http.Server, logger *slog.Logger) {
 	if server.ErrorLog == nil {
 		server.ErrorLog = slog.NewLogLogger(logger.Handler(), slog.LevelWarn)

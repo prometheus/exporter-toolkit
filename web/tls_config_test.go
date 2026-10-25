@@ -840,11 +840,11 @@ func TestServeErrorLog(t *testing.T) {
 	}
 }
 
-// TestServeMultipleWithoutListeners checks that ServeMultiple returns without
-// touching the server when there is nothing to serve.
+// TestServeMultipleWithoutListeners checks that ServeMultiple returns an error
+// without touching the server when there is nothing to serve.
 func TestServeMultipleWithoutListeners(t *testing.T) {
-	if err := ServeMultiple(nil, nil, nil, testlogger); err != nil {
-		t.Fatal(err)
+	if err := ServeMultiple(nil, nil, nil, testlogger); err == nil {
+		t.Fatal("expected an error when no listeners are provided")
 	}
 }
 
