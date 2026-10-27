@@ -105,7 +105,7 @@ func (c *FlagConfig) checkFlags() error {
 
 // IsEnabled reports whether the TLSConfig configures TLS, i.e. whether at least
 // one TLS-related field is set. It does not validate that the configuration is
-// complete or that the referenced files exist; use ConfigToTLSConfig for that.
+// complete or that the referenced files exist; use [ConfigToTLSConfig] for that.
 // This is useful for callers that need to know whether the server will serve
 // HTTPS, for example to infer the scheme of an external URL.
 func (t *TLSConfig) IsEnabled() bool {
@@ -122,7 +122,7 @@ func (t *TLSConfig) SetDirectory(dir string) {
 	t.ClientCAs = config_util.JoinDir(dir, t.ClientCAs)
 }
 
-// VerifyPeerCertificate will check the SAN entries of the client cert if there is configuration for it
+// VerifyPeerCertificate will check the SAN entries of the client cert if there is configuration for it.
 func (t *TLSConfig) VerifyPeerCertificate(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 	// sender cert comes first, see https://www.rfc-editor.org/rfc/rfc5246#section-7.4.2
 	cert, err := x509.ParseCertificate(rawCerts[0])
@@ -205,7 +205,7 @@ func validateTLSPaths(c *TLSConfig) error {
 	return nil
 }
 
-// ConfigToTLSConfig generates the golang tls.Config from the TLSConfig struct.
+// ConfigToTLSConfig generates the [tls.Config] from c.
 func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 	if err := validateTLSPaths(c); err != nil {
 		return nil, err
@@ -313,8 +313,8 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 	return cfg, nil
 }
 
-// ServeMultiple starts the server on the given listeners. The FlagConfig is
-// also passed on to Serve.
+// ServeMultiple starts the server on the given listeners. The [FlagConfig] is
+// also passed on to [Serve].
 func ServeMultiple(listeners []net.Listener, server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
 	if len(listeners) == 0 {
 		return errors.New("no listeners provided")
@@ -329,12 +329,15 @@ func ServeMultiple(listeners []net.Listener, server *http.Server, flags *FlagCon
 	return errs.Wait()
 }
 
-// ListenAndServe starts the server on addresses given in WebListenAddresses in
-// the FlagConfig. When address starts looks like vsock://:{port}, it listens on
-// vsock. More info check https://wiki.qemu.org/Features/VirtioVsock .
-// Or instead uses systemd socket activated listeners if WebSystemdSocket in the
-// FlagConfig is true.
-// The FlagConfig is also passed on to ServeMultiple.
+// ListenAndServe starts the server on addresses given in [FlagConfig.WebListenAddresses].
+//
+//   - If [FlagConfig.WebSystemdSocket] is true, uses systemd socket activated listeners.
+//   - If an address has the format vsock://:{port}, listens on a [vsock].
+//   - If the address has the format unix://{path}, listens on a unix domain socket at the given path.
+//
+// The [FlagConfig] is also passed to [ServeMultiple].
+//
+// [vsock]: https://wiki.qemu.org/Features/VirtioVsock
 func ListenAndServe(server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
 	if err := flags.checkFlags(); err != nil {
 		return err
@@ -354,24 +357,30 @@ func ListenAndServe(server *http.Server, flags *FlagConfig, logger *slog.Logger)
 
 	listeners := make([]net.Listener, 0, len(*flags.WebListenAddresses))
 	for _, address := range *flags.WebListenAddresses {
-		var err error
-		var listener net.Listener
+		var (
+			listener net.Listener
+			err      error
+		)
+
 		if strings.HasPrefix(address, "vsock://") {
 			port, err := parseVsockPort(address)
 			if err != nil {
 				return err
 			}
+
 			listener, err = vsock.Listen(port, nil)
-			if err != nil {
-				return err
-			}
+		} else if path, ok := strings.CutPrefix(address, "unix://"); ok {
+			listener, err = net.Listen("unix", path)
 		} else {
 			listener, err = net.Listen("tcp", address)
-			if err != nil {
-				return err
-			}
 		}
+
+		if err != nil {
+			return err
+		}
+
 		defer listener.Close()
+
 		listeners = append(listeners, listener)
 	}
 	return ServeMultiple(listeners, server, flags, logger)
@@ -394,12 +403,12 @@ func parseVsockPort(address string) (uint32, error) {
 }
 
 // Server starts the server on the given listener. Based on the file path
-// WebConfigFile in the FlagConfig, TLS or basic auth could be enabled.
+// [FlagConfig.WebConfigFile], TLS or basic auth could be enabled.
 //
 // If server.ErrorLog is nil, Serve sets it so that errors logged by the HTTP
 // server itself, such as TLS handshake errors, go to logger at warn level.
 // Callers that pass the same server to Serve from several goroutines should
-// set server.ErrorLog before starting them, as ServeMultiple does.
+// set server.ErrorLog before starting them, as [ServeMultiple] does.
 func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
 	logger.Info("Listening on", "address", l.Addr().String())
 	setErrorLog(server, logger)
@@ -608,10 +617,10 @@ func (tv *TLSVersion) MarshalYAML() (any, error) {
 	return fmt.Sprintf("%v", tv), nil
 }
 
-// Listen starts the server on the given address. Based on the file
-// tlsConfigPath, TLS or basic auth could be enabled.
+// Listen starts the server on the given address. Based on the file path
+// [FlagConfig.WebConfigFile], TLS or basic auth could be enabled.
 //
-// Deprecated: Use ListenAndServe instead.
+// Deprecated: Use [ListenAndServe] instead.
 func Listen(server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
 	return ListenAndServe(server, flags, logger)
 }
