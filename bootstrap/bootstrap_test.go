@@ -370,3 +370,35 @@ func TestNewServerRejectsReservedRoutes(t *testing.T) {
 		}
 	}
 }
+
+// TestNewServerPprof checks the profiling endpoints are served by default and
+// removed by --web.disable-pprof.
+func TestNewServerPprof(t *testing.T) {
+	factory := func(*Bootstrap) (http.Handler, error) {
+		return http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), nil
+	}
+	for _, tc := range []struct {
+		name string
+		args []string
+		want int
+	}{
+		{"enabled by default", nil, http.StatusOK},
+		{"disabled", []string{"--web.disable-pprof"}, http.StatusNotFound},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := runnerForFactory(t, factory, tc.args...)
+			for _, path := range []string{"/debug/pprof/", "/debug/pprof/cmdline"} {
+				rec := httptest.NewRecorder()
+				server.Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+				if rec.Code != tc.want {
+					t.Errorf("GET %s: got %d, want %d", path, rec.Code, tc.want)
+				}
+			}
+			rec := httptest.NewRecorder()
+			server.Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+			if rec.Code != http.StatusOK {
+				t.Errorf("GET /: got %d, want %d", rec.Code, http.StatusOK)
+			}
+		})
+	}
+}

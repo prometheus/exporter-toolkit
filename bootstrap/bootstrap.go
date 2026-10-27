@@ -177,6 +177,7 @@ type Runner struct {
 	metricsPath            *string
 	disableExporterMetrics *bool
 	maxRequests            *int
+	disablePprof           *bool
 
 	// Logger is the resolved logger after parsing configuration.
 	Logger *slog.Logger
@@ -188,6 +189,8 @@ type Runner struct {
 	DisableExporterMetrics bool
 	// MaxRequests is the parsed value of --web.max-requests.
 	MaxRequests int
+	// DisablePprof is the parsed value of --web.disable-pprof.
+	DisablePprof bool
 	// LandingConfig is the resolved landing page configuration.
 	LandingConfig web.LandingConfig
 	// MetricsHandler is the configured static metrics handler.
@@ -230,6 +233,10 @@ func New(c Config) *Runner {
 			"web.max-requests",
 			"Maximum number of requests served in parallel. Further requests are answered with 503 until one completes. Use 0 to disable.",
 		).Default("40").Int(),
+		disablePprof: app.Flag(
+			"web.disable-pprof",
+			"Do not serve the Go profiling endpoints under /debug/pprof/.",
+		).Bool(),
 	}
 
 	if c.Logger == nil {
@@ -262,6 +269,7 @@ func (t *Runner) parse(args []string) error {
 	t.MetricsPath = *t.metricsPath
 	t.DisableExporterMetrics = *t.disableExporterMetrics
 	t.MaxRequests = *t.maxRequests
+	t.DisablePprof = *t.disablePprof
 	t.LandingConfig = t.defaultLandingConfig()
 	return nil
 }
@@ -351,11 +359,13 @@ func (t *Runner) newServer(metricsHandler http.Handler) (*http.Server, error) {
 			return nil, err
 		}
 		mux.Handle("/", landingPage)
-		mux.HandleFunc("GET /debug/pprof/", pprof.Index)
-		mux.HandleFunc("GET /debug/pprof/cmdline", pprof.Cmdline)
-		mux.HandleFunc("GET /debug/pprof/profile", pprof.Profile)
-		mux.HandleFunc("GET /debug/pprof/symbol", pprof.Symbol)
-		mux.HandleFunc("GET /debug/pprof/trace", pprof.Trace)
+		if !t.DisablePprof {
+			mux.HandleFunc("GET /debug/pprof/", pprof.Index)
+			mux.HandleFunc("GET /debug/pprof/cmdline", pprof.Cmdline)
+			mux.HandleFunc("GET /debug/pprof/profile", pprof.Profile)
+			mux.HandleFunc("GET /debug/pprof/symbol", pprof.Symbol)
+			mux.HandleFunc("GET /debug/pprof/trace", pprof.Trace)
+		}
 	}
 
 	readHeaderTimeout := defaultReadHeaderTimeout
