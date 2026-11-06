@@ -18,6 +18,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/prometheus/client_golang/prometheus"
@@ -32,19 +33,26 @@ type fakeCollector struct{ name string }
 
 type fakeConfig struct{ prefix string }
 
+func mustRegister(t *testing.T, r *Registry[*fakeCollector, fakeConfig], d Descriptor) {
+	t.Helper()
+	err := r.Register(d, func(c fakeConfig) (*fakeCollector, error) { return &fakeCollector{name: c.prefix + d.Name}, nil })
+	if err != nil {
+		t.Fatalf("Register(%s): %v", d.Name, err)
+	}
+}
+
 func newTestRegistry(t *testing.T) (*Registry[*fakeCollector, fakeConfig], *kingpin.Application) {
 	t.Helper()
 
 	r := NewRegistry[*fakeCollector, fakeConfig]("test")
-	r.Register(Descriptor{Name: "cpu", Help: "CPU stats", DefaultEnabled: true},
-		func(c fakeConfig) (*fakeCollector, error) { return &fakeCollector{name: c.prefix + "cpu"}, nil })
-	r.Register(Descriptor{Name: "disk", Help: "Disk stats", DefaultEnabled: true},
-		func(c fakeConfig) (*fakeCollector, error) { return &fakeCollector{name: c.prefix + "disk"}, nil })
-	r.Register(Descriptor{Name: "expensive", Help: "Slow stats", DefaultEnabled: false, Requires: []string{"an extension"}},
-		func(c fakeConfig) (*fakeCollector, error) { return &fakeCollector{name: c.prefix + "expensive"}, nil })
+	mustRegister(t, r, Descriptor{Name: "cpu", Help: "CPU stats", DefaultEnabled: true})
+	mustRegister(t, r, Descriptor{Name: "disk", Help: "Disk stats", DefaultEnabled: true})
+	mustRegister(t, r, Descriptor{Name: "expensive", Help: "Slow stats", DefaultEnabled: false, Requires: []string{"an extension"}})
 
 	app := kingpin.New("test", "").Terminate(nil)
-	r.AddFlags(app)
+	if err := r.AddFlags(app); err != nil {
+		t.Fatalf("AddFlags: %v", err)
+	}
 	return r, app
 }
 
@@ -79,38 +87,31 @@ func TestFlagsOverrideDefaults(t *testing.T) {
 	}
 }
 
-// DisableDefaults must leave explicitly-named collectors alone; that is the
-// whole point of tracking forced state, and the subtlest thing the exporters
-// duplicate today.
-func TestDisableDefaultsKeepsExplicitChoices(t *testing.T) {
-	r, app := newTestRegistry(t)
-	if _, err := app.Parse([]string{"--collector.disk"}); err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	r.DisableDefaults()
-
-	if got, want := r.Enabled(), []string{"disk"}; !slices.Equal(got, want) {
-		t.Errorf("Enabled() = %v, want %v", got, want)
+func TestDisableDefaultsKeepsExplicitChoicesInAnyOrder(t *testing.T) {
+	for _, args := range [][]string{
+		{"--collector.disable-defaults", "--collector.disk"},
+		{"--collector.disk", "--collector.disable-defaults"},
+	} {
+		r, app := newTestRegistry(t)
+		if _, err := app.Parse(args); err != nil {
+			t.Fatalf("parse %v: %v", args, err)
+		}
+		if got, want := r.Enabled(), []string{"disk"}; !slices.Equal(got, want) {
+			t.Errorf("args %v: Enabled() = %v, want %v", args, got, want)
+		}
 	}
 }
 
-func TestSetEnabled(t *testing.T) {
+func TestSetEnabledSurvivesParse(t *testing.T) {
 	r, app := newTestRegistry(t)
-	if _, err := app.Parse(nil); err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-
 	if err := r.SetEnabled("expensive", true); err != nil {
 		t.Fatalf("SetEnabled: %v", err)
 	}
-	if !r.IsEnabled("expensive") {
-		t.Error("expensive should be enabled after SetEnabled")
+	if _, err := app.Parse([]string{"--collector.disable-defaults"}); err != nil {
+		t.Fatalf("parse: %v", err)
 	}
-
-	// Marked as forced, so DisableDefaults must not clear it.
-	r.DisableDefaults()
-	if !r.IsEnabled("expensive") {
-		t.Error("SetEnabled should mark the collector as explicitly chosen")
+	if got, want := r.Enabled(), []string{"expensive"}; !slices.Equal(got, want) {
+		t.Errorf("Enabled() = %v, want %v", got, want)
 	}
 
 	if err := r.SetEnabled("nope", true); err == nil {
@@ -182,8 +183,10 @@ func TestBuildFilters(t *testing.T) {
 
 func TestBuildFactoryError(t *testing.T) {
 	r := NewRegistry[*fakeCollector, fakeConfig]("test")
-	r.Register(Descriptor{Name: "broken", DefaultEnabled: true},
-		func(fakeConfig) (*fakeCollector, error) { return nil, errors.New("boom") })
+	if err := r.Register(Descriptor{Name: "broken", DefaultEnabled: true},
+		func(fakeConfig) (*fakeCollector, error) { return nil, errors.New("boom") }); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
 
 	if _, err := r.Build(StaticConfig(fakeConfig{})); err == nil || !strings.Contains(err.Error(), "broken") {
 		t.Errorf("Build() error = %v, want one naming the collector", err)
@@ -268,28 +271,45 @@ test_collector_enabled{collector="expensive"} 0
 	}
 }
 
-func TestRegisterDuplicatePanics(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Error("duplicate registration should panic")
-		}
-	}()
+func TestBuildAllowsCallbacksIntoRegistry(t *testing.T) {
+	r, app := newTestRegistry(t)
+	if _, err := app.Parse(nil); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
 
-	r := NewRegistry[*fakeCollector, fakeConfig]("test")
-	d := Descriptor{Name: "cpu"}
-	r.Register(d, func(fakeConfig) (*fakeCollector, error) { return nil, nil })
-	r.Register(d, func(fakeConfig) (*fakeCollector, error) { return nil, nil })
+	done := make(chan error, 1)
+	go func() {
+		_, err := r.Build(func(name string) fakeConfig {
+			r.IsEnabled(name)
+			return fakeConfig{}
+		})
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Build deadlocked when cfgFor called back into the registry")
+	}
 }
 
-func TestRegisterAfterAddFlagsPanics(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Error("registration after AddFlags should panic")
-		}
-	}()
-
+func TestRegisterErrors(t *testing.T) {
 	r, _ := newTestRegistry(t)
-	r.Register(Descriptor{Name: "late"}, func(fakeConfig) (*fakeCollector, error) { return nil, nil })
+	factory := func(fakeConfig) (*fakeCollector, error) { return nil, nil }
+
+	for name, err := range map[string]error{
+		"empty name":     r.Register(Descriptor{}, factory),
+		"duplicate":      r.Register(Descriptor{Name: "cpu"}, factory),
+		"after AddFlags": r.Register(Descriptor{Name: "late"}, factory),
+		"nil factory":    NewRegistry[*fakeCollector, fakeConfig]("test").Register(Descriptor{Name: "x"}, nil),
+		"AddFlags twice": r.AddFlags(kingpin.New("again", "")),
+	} {
+		if err == nil {
+			t.Errorf("%s: want an error", name)
+		}
+	}
 }
 
 func TestScrapeReporter(t *testing.T) {

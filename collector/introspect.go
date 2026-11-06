@@ -50,7 +50,7 @@ func (r *Registry[C, Cfg]) Report() Report {
 	out := Report{Namespace: r.namespace, Collectors: make([]State, 0, len(r.entries))}
 	for _, name := range slices.Sorted(maps.Keys(r.entries)) {
 		e := r.entries[name]
-		out.Collectors = append(out.Collectors, State{Descriptor: e.desc, Enabled: e.enabled})
+		out.Collectors = append(out.Collectors, State{Descriptor: e.desc, Enabled: r.enabledLocked(e)})
 	}
 	return out
 }

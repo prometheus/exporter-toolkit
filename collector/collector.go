@@ -28,6 +28,7 @@
 package collector
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -84,18 +85,20 @@ func StaticConfig[Cfg any](cfg Cfg) func(string) Cfg {
 type Registry[C any, Cfg any] struct {
 	namespace string
 
-	mtx        sync.Mutex
-	entries    map[string]*entry[C, Cfg]
-	flagsAdded bool
+	mtx             sync.Mutex
+	entries         map[string]*entry[C, Cfg]
+	flagsAdded      bool
+	disableDefaults bool
 }
 
 type entry[C any, Cfg any] struct {
-	desc     Descriptor
-	factory  func(Cfg) (C, error)
-	enabled  bool
-	forced   bool
-	built    bool
-	instance C
+	desc    Descriptor
+	factory func(Cfg) (C, error)
+	// override is the operator's explicit choice, nil when they made none.
+	override  *bool
+	flagValue bool
+	built     bool
+	instance  C
 }
 
 // NewRegistry returns an empty Registry. The namespace is used to prefix any
@@ -109,41 +112,44 @@ func NewRegistry[C any, Cfg any](namespace string) *Registry[C, Cfg] {
 
 // Register adds a collector to the registry. It is intended to be called from
 // an init() function, the way exporters register collectors today.
-//
-// Register panics on a duplicate name or on registration after AddFlags, both
-// of which are programmer errors that would otherwise surface as a silently
-// missing collector.
-func (r *Registry[C, Cfg]) Register(d Descriptor, factory func(Cfg) (C, error)) {
+func (r *Registry[C, Cfg]) Register(d Descriptor, factory func(Cfg) (C, error)) error {
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
 
 	if d.Name == "" {
-		panic("collector: Register called with an empty Descriptor.Name")
+		return errors.New("collector: empty Descriptor.Name")
 	}
 	if _, dup := r.entries[d.Name]; dup {
-		panic(fmt.Sprintf("collector: duplicate registration for %q", d.Name))
+		return fmt.Errorf("collector: duplicate registration for %q", d.Name)
 	}
 	if r.flagsAdded {
-		panic(fmt.Sprintf("collector: %q registered after AddFlags", d.Name))
+		return fmt.Errorf("collector: %q registered after AddFlags", d.Name)
 	}
 	if factory == nil {
-		panic(fmt.Sprintf("collector: %q registered with a nil factory", d.Name))
+		return fmt.Errorf("collector: %q registered with a nil factory", d.Name)
 	}
 
-	r.entries[d.Name] = &entry[C, Cfg]{desc: d, factory: factory, enabled: d.DefaultEnabled}
+	r.entries[d.Name] = &entry[C, Cfg]{desc: d, factory: factory}
+	return nil
 }
 
-// AddFlags registers the `--collector.<name>` / `--no-collector.<name>` flag
-// pair for every registered collector to a kingpin Application or CmdClause.
-// Call it once, from main, before parsing.
-func (r *Registry[C, Cfg]) AddFlags(app flagGroup) {
+// AddFlags registers `--collector.disable-defaults` and the
+// `--collector.<name>` / `--no-collector.<name>` flag pair for every
+// registered collector to a kingpin Application or CmdClause. Call it once,
+// from main, before parsing.
+func (r *Registry[C, Cfg]) AddFlags(app flagGroup) error {
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
 
 	if r.flagsAdded {
-		panic("collector: AddFlags called twice")
+		return errors.New("collector: AddFlags called twice")
 	}
 	r.flagsAdded = true
+
+	app.Flag("collector.disable-defaults", "Set all collectors to disabled by default.").
+		Default("false").
+		BoolVar(&r.disableDefaults)
+
 	for _, name := range slices.Sorted(maps.Keys(r.entries)) {
 		e := r.entries[name]
 
@@ -154,45 +160,32 @@ func (r *Registry[C, Cfg]) AddFlags(app flagGroup) {
 
 		app.Flag(fmt.Sprintf("collector.%s", name), fmt.Sprintf("%s (default: %s).", help, e.desc.defaultState())).
 			Default(strconv.FormatBool(e.desc.DefaultEnabled)).
-			Action(r.forceAction(e)).
-			BoolVar(&e.enabled)
+			Action(r.overrideAction(e)).
+			BoolVar(&e.flagValue)
 	}
+	return nil
 }
 
-// forceAction records that an operator named this collector on the command
-// line, so DisableDefaults can leave explicit choices alone.
+// overrideAction records the value of a flag the operator passed. kingpin
+// writes defaults into flagValue for flags nobody passed, so only this action
+// tells an explicit choice apart from a default.
 //
 // A distinct closure per collector is required because kingpin's ParseContext
 // does not identify which flag invoked the action.
 // See: https://github.com/alecthomas/kingpin/issues/294
-func (r *Registry[C, Cfg]) forceAction(e *entry[C, Cfg]) func(*kingpin.ParseContext) error {
+func (r *Registry[C, Cfg]) overrideAction(e *entry[C, Cfg]) func(*kingpin.ParseContext) error {
 	return func(*kingpin.ParseContext) error {
 		r.mtx.Lock()
 		defer r.mtx.Unlock()
-		e.forced = true
+		v := e.flagValue
+		e.override = &v
 		return nil
 	}
 }
 
-// DisableDefaults turns off every collector the operator did not explicitly
-// name on the command line. It backs the conventional
-// `--collector.disable-defaults` flag.
-func (r *Registry[C, Cfg]) DisableDefaults() {
-	r.mtx.Lock()
-	defer r.mtx.Unlock()
-
-	for _, e := range r.entries {
-		if !e.forced {
-			e.enabled = false
-		}
-	}
-}
-
-// SetEnabled overrides a collector's state programmatically and marks it as
-// explicitly chosen, so a later DisableDefaults will not clear it. It exists
-// for exporters that resolve collector state from a config file as well as
-// from flags. Call it after parsing flags, because parsing writes the flag
-// defaults over any earlier value.
+// SetEnabled overrides a collector's state programmatically, the same way a
+// flag would. It exists for exporters that resolve collector state from a
+// config file as well as from flags.
 func (r *Registry[C, Cfg]) SetEnabled(name string, enabled bool) error {
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
@@ -201,9 +194,15 @@ func (r *Registry[C, Cfg]) SetEnabled(name string, enabled bool) error {
 	if !ok {
 		return fmt.Errorf("unknown collector: %s", name)
 	}
-	e.enabled = enabled
-	e.forced = true
+	e.override = &enabled
 	return nil
+}
+
+func (r *Registry[C, Cfg]) enabledLocked(e *entry[C, Cfg]) bool {
+	if e.override != nil {
+		return *e.override
+	}
+	return e.desc.DefaultEnabled && !r.disableDefaults
 }
 
 // IsEnabled reports whether a collector will run. Unknown names report false.
@@ -212,7 +211,7 @@ func (r *Registry[C, Cfg]) IsEnabled(name string) bool {
 	defer r.mtx.Unlock()
 
 	e, ok := r.entries[name]
-	return ok && e.enabled
+	return ok && r.enabledLocked(e)
 }
 
 // Descriptors returns every registered collector, enabled or not, sorted by
@@ -237,7 +236,7 @@ func (r *Registry[C, Cfg]) Enabled() []string {
 
 	var out []string
 	for name, e := range r.entries {
-		if e.enabled {
+		if r.enabledLocked(e) {
 			out = append(out, name)
 		}
 	}
@@ -258,6 +257,33 @@ func (r *Registry[C, Cfg]) Enabled() []string {
 // unknown or disabled collector is an error. This backs the `collect[]` scrape
 // parameter.
 func (r *Registry[C, Cfg]) Build(cfgFor func(name string) Cfg, filters ...string) (map[string]C, error) {
+	out, unbuilt, err := r.selectForBuild(filters)
+	if err != nil {
+		return nil, err
+	}
+
+	// Factories and cfgFor run without the lock, so they can call back into
+	// the registry and a slow factory does not block other callers.
+	for _, e := range unbuilt {
+		c, err := e.factory(cfgFor(e.desc.Name))
+		if err != nil {
+			return nil, fmt.Errorf("couldn't create collector %s: %w", e.desc.Name, err)
+		}
+
+		r.mtx.Lock()
+		// ponytail: two concurrent first builds both run the factory and the
+		// loser's instance is dropped; add per-entry sync.Once if a factory
+		// opens handles that must be closed.
+		if !e.built {
+			e.instance, e.built = c, true
+		}
+		out[e.desc.Name] = e.instance
+		r.mtx.Unlock()
+	}
+	return out, nil
+}
+
+func (r *Registry[C, Cfg]) selectForBuild(filters []string) (map[string]C, []*entry[C, Cfg], error) {
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
 
@@ -265,32 +291,30 @@ func (r *Registry[C, Cfg]) Build(cfgFor func(name string) Cfg, filters ...string
 	for _, f := range filters {
 		e, ok := r.entries[f]
 		if !ok {
-			return nil, fmt.Errorf("missing collector: %s", f)
+			return nil, nil, fmt.Errorf("missing collector: %s", f)
 		}
-		if !e.enabled {
-			return nil, fmt.Errorf("disabled collector: %s", f)
+		if !r.enabledLocked(e) {
+			return nil, nil, fmt.Errorf("disabled collector: %s", f)
 		}
 	}
 	if len(filters) == 0 {
 		names = make([]string, 0, len(r.entries))
 		for name, e := range r.entries {
-			if e.enabled {
+			if r.enabledLocked(e) {
 				names = append(names, name)
 			}
 		}
 	}
 
 	out := make(map[string]C, len(names))
+	var unbuilt []*entry[C, Cfg]
 	for _, name := range names {
 		e := r.entries[name]
-		if !e.built {
-			c, err := e.factory(cfgFor(name))
-			if err != nil {
-				return nil, fmt.Errorf("couldn't create collector %s: %w", name, err)
-			}
-			e.instance, e.built = c, true
+		if e.built {
+			out[name] = e.instance
+		} else {
+			unbuilt = append(unbuilt, e)
 		}
-		out[name] = e.instance
 	}
-	return out, nil
+	return out, unbuilt, nil
 }
