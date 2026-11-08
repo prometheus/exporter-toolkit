@@ -17,8 +17,10 @@
 package bootstrap
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/pprof"
@@ -178,6 +180,10 @@ type Runner struct {
 	disableExporterMetrics *bool
 	maxRequests            *int
 	enablePprof            *bool
+	oneshot                *bool
+
+	// stdout is where --oneshot writes the metrics. When nil, os.Stdout is used.
+	stdout io.Writer
 
 	// Logger is the resolved logger after parsing configuration.
 	Logger *slog.Logger
@@ -191,6 +197,8 @@ type Runner struct {
 	MaxRequests int
 	// EnablePprof is the parsed value of --web.enable-pprof.
 	EnablePprof bool
+	// Oneshot is the parsed value of --oneshot.
+	Oneshot bool
 	// LandingConfig is the resolved landing page configuration.
 	LandingConfig web.LandingConfig
 	// MetricsHandler is the configured static metrics handler.
@@ -237,6 +245,10 @@ func New(c Config) *Runner {
 			"web.enable-pprof",
 			"Enable Go profiling under /debug/pprof/.",
 		).Default("true").Bool(),
+		oneshot: app.Flag(
+			"oneshot",
+			"Gather the metrics once, write them to stdout in the text format and exit, instead of serving them.",
+		).Bool(),
 	}
 
 	if c.Logger == nil {
@@ -270,6 +282,7 @@ func (t *Runner) parse(args []string) error {
 	t.DisableExporterMetrics = *t.disableExporterMetrics
 	t.MaxRequests = *t.maxRequests
 	t.EnablePprof = *t.enablePprof
+	t.Oneshot = *t.oneshot
 	t.LandingConfig = t.defaultLandingConfig()
 	return nil
 }
@@ -288,6 +301,9 @@ func (t *Runner) runWithArgs(args []string) error {
 	if err != nil {
 		return err
 	}
+	if t.Oneshot {
+		return t.writeMetricsOnce(handler)
+	}
 	server, err := t.newServer(handler)
 	if err != nil {
 		return err
@@ -297,6 +313,51 @@ func (t *Runner) runWithArgs(args []string) error {
 		t.Logger.Info("Build context", "build_context", version.BuildContext())
 	}
 	return web.ListenAndServe(server, t.FlagConfig, t.Logger)
+}
+
+// writeMetricsOnce asks the metrics handler for the metrics once, the way a
+// scrape would, and writes them to stdout. This lets the output go to a file,
+// for example for the node_exporter textfile collector, without a server.
+func (t *Runner) writeMetricsOnce(handler http.Handler) error {
+	req, err := http.NewRequest(http.MethodGet, t.MetricsPath, nil)
+	if err != nil {
+		return err
+	}
+	// Ask for the text format, which the textfile collector reads.
+	req.Header.Set("Accept", "text/plain")
+	w := &bufferedResponse{header: http.Header{}, status: http.StatusOK}
+	handler.ServeHTTP(w, req)
+	if w.status != http.StatusOK {
+		return fmt.Errorf("gathering metrics failed with status %d: %s", w.status, bytes.TrimSpace(w.body.Bytes()))
+	}
+	stdout := t.stdout
+	if stdout == nil {
+		stdout = os.Stdout
+	}
+	_, err = w.body.WriteTo(stdout)
+	return err
+}
+
+// bufferedResponse is an http.ResponseWriter that keeps the response in memory.
+type bufferedResponse struct {
+	header      http.Header
+	body        bytes.Buffer
+	status      int
+	wroteHeader bool
+}
+
+func (w *bufferedResponse) Header() http.Header { return w.header }
+
+func (w *bufferedResponse) WriteHeader(status int) {
+	if !w.wroteHeader {
+		w.status = status
+		w.wroteHeader = true
+	}
+}
+
+func (w *bufferedResponse) Write(b []byte) (int, error) {
+	w.WriteHeader(http.StatusOK)
+	return w.body.Write(b)
 }
 
 func (t *Runner) resolveMetricsHandler() (http.Handler, error) {

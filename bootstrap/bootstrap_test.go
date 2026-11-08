@@ -14,6 +14,7 @@
 package bootstrap
 
 import (
+	"bytes"
 	"errors"
 	"net"
 	"net/http"
@@ -400,5 +401,56 @@ func TestNewServerPprof(t *testing.T) {
 				t.Errorf("GET /: got %d, want %d", rec.Code, http.StatusOK)
 			}
 		})
+	}
+}
+
+func TestRunOneshotWritesMetrics(t *testing.T) {
+	var stdout bytes.Buffer
+	tk := New(Config{
+		App:            kingpin.New("test", ""),
+		DefaultAddress: ":9100",
+		Logger:         promslog.NewNopLogger(),
+		MetricsHandler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/custom" {
+				t.Errorf("metrics handler got path %q, want /custom", r.URL.Path)
+			}
+			_, _ = w.Write([]byte("test_metric 1\n"))
+		}),
+	})
+	tk.stdout = &stdout
+
+	// A listen address that is in use would fail if the server were started.
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+
+	if err := tk.runWithArgs([]string{"--oneshot", "--web.telemetry-path=/custom", "--web.listen-address=" + l.Addr().String()}); err != nil {
+		t.Fatalf("runWithArgs() = %v, want nil", err)
+	}
+	if got, want := stdout.String(), "test_metric 1\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+}
+
+func TestRunOneshotReportsHandlerErrors(t *testing.T) {
+	var stdout bytes.Buffer
+	tk := New(Config{
+		App:            kingpin.New("test", ""),
+		DefaultAddress: ":9100",
+		Logger:         promslog.NewNopLogger(),
+		MetricsHandler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "collector failed", http.StatusInternalServerError)
+		}),
+	})
+	tk.stdout = &stdout
+
+	err := tk.runWithArgs([]string{"--oneshot"})
+	if err == nil || !strings.Contains(err.Error(), "collector failed") {
+		t.Fatalf("runWithArgs() = %v, want an error with the handler's message", err)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want nothing on error", stdout.String())
 	}
 }
