@@ -46,6 +46,10 @@ func AddFlags(a flagGroup, defaultAddress string) *web.FlagConfig {
 			"web.config.file",
 			"Path to configuration file that can enable TLS or authentication. See: https://github.com/prometheus/exporter-toolkit/blob/master/docs/web-configuration.md",
 		).Default("").String(),
+		WebProbeListenAddress: a.Flag(
+			"web.probe-listen-address",
+			"Optional TCP address for a plain-HTTP listener that serves only health check paths configured by the process, without TLS or basic authentication. Disabled when empty. Do not expose this port through a Service.",
+		).Default("").String(),
 	}
 	return &flags
 }

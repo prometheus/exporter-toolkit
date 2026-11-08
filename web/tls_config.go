@@ -14,6 +14,7 @@
 package web
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -27,6 +28,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coreos/go-systemd/v22/activation"
@@ -79,6 +81,10 @@ type FlagConfig struct {
 	WebSystemdSocket *bool
 	// WebConfigFile points to the TLS and authentication configuration file.
 	WebConfigFile *string
+	// WebProbeListenAddress is the optional plain-HTTP probe listener address. Empty disables it.
+	WebProbeListenAddress *string
+	// Probe is set by the binary before ListenAndServe when WebProbeListenAddress is non-empty.
+	Probe *ProbeConfig
 }
 
 // checkFlags validates that the flag configuration contains the required
@@ -314,7 +320,8 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 }
 
 // ServeMultiple starts the server on the given listeners. It configures the
-// server once before serving any listener.
+// server once before serving any listener. It does not open the optional probe
+// listener; callers that already bound the main listeners use ServeMultipleWithProbe.
 func ServeMultiple(listeners []net.Listener, server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
 	if len(listeners) == 0 {
 		return errors.New("no listeners provided")
@@ -332,52 +339,198 @@ func ServeMultiple(listeners []net.Listener, server *http.Server, flags *FlagCon
 	return errs.Wait()
 }
 
+// ServeMultipleWithProbe serves already-bound main listeners and, when
+// WebProbeListenAddress is set, the plain-HTTP probe listener. An empty probe
+// address matches ServeMultiple. The probe accepts only after a main listener
+// does, and shutting down server also shuts down the probe.
+func ServeMultipleWithProbe(listeners []net.Listener, server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
+	if err := flags.validateProbeConfig(); err != nil {
+		return err
+	}
+	probeAddr := flags.probeListenAddress()
+	if probeAddr == "" {
+		logger.Debug("Probe listener disabled.")
+		return ServeMultiple(listeners, server, flags, logger)
+	}
+	return serveBoundListenersWithProbe(listeners, server, flags, logger, probeAddr)
+}
+
 // ListenAndServe starts the server on addresses given in WebListenAddresses in
 // the FlagConfig. When address starts looks like vsock://:{port}, it listens on
 // vsock. More info check https://wiki.qemu.org/Features/VirtioVsock .
 // Or instead uses systemd socket activated listeners if WebSystemdSocket in the
 // FlagConfig is true.
+// WebProbeListenAddress is optional; an empty value disables the probe listener.
+// When it is non-empty, Probe must be set.
 // The FlagConfig is also passed on to ServeMultiple.
 func ListenAndServe(server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
 	if err := flags.checkFlags(); err != nil {
 		return err
 	}
+	if err := flags.validateProbeConfig(); err != nil {
+		return err
+	}
 
+	probeAddr := flags.probeListenAddress()
+	if probeAddr == "" {
+		logger.Debug("Probe listener disabled.")
+		return listenAndServeMain(server, flags, logger)
+	}
+	return listenAndServeWithProbe(server, flags, logger, probeAddr)
+}
+
+// listenAndServeWithProbe binds the main listeners, then serves them with the
+// probe listener. The caller closes the main listeners.
+func listenAndServeWithProbe(server *http.Server, flags *FlagConfig, logger *slog.Logger, probeAddr string) error {
+	mainListeners, err := bindMainListeners(flags, logger)
+	if err != nil {
+		return err
+	}
+	defer closeListeners(mainListeners)
+	return serveBoundListenersWithProbe(mainListeners, server, flags, logger, probeAddr)
+}
+
+// serveBoundListenersWithProbe binds the probe listener before either Serve loop
+// starts. The probe accepts only after a main listener does, and main
+// Server.Shutdown stops the probe so readiness tracks the primary port.
+// Caller-owned main listeners are left open. The probe server is plain HTTP and
+// is not passed through configureServer, so it does not inherit TLS or basic auth.
+func serveBoundListenersWithProbe(listeners []net.Listener, server *http.Server, flags *FlagConfig, logger *slog.Logger, probeAddr string) error {
+	probeListener, err := net.Listen("tcp", probeAddr)
+	if err != nil {
+		logger.Error("Failed to listen on probe address", "address", probeAddr, "err", err)
+		return err
+	}
+	defer func() { _ = probeListener.Close() }()
+
+	servingListeners, accepting := notifyOnFirstAccept(listeners)
+	probeServer := newProbeServer(server, flags.Probe)
+	var stopProbe sync.Once
+	stopProbeServer := func() {
+		stopProbe.Do(func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			_ = probeServer.Shutdown(shutdownCtx)
+		})
+	}
+	// Runs when the caller shuts down the main server, before that Shutdown waits
+	// for main connections to finish. A later call covers serve errors that never
+	// invoke Shutdown.
+	server.RegisterOnShutdown(stopProbeServer)
+
+	mainErrCh := make(chan error, 1)
+	go func() {
+		mainErrCh <- ServeMultiple(servingListeners, server, flags, logger)
+	}()
+
+	probeErrCh := make(chan error, 1)
+	select {
+	case <-accepting:
+		go func() {
+			serveErr := serveProbeListener(probeListener, probeServer, flags.Probe.AllowedPaths, logger)
+			if errors.Is(serveErr, http.ErrServerClosed) {
+				serveErr = nil
+			} else if serveErr != nil {
+				logger.Error("Probe listener stopped unexpectedly", "err", serveErr)
+			}
+			probeErrCh <- serveErr
+		}()
+	case err = <-mainErrCh:
+		// Main failed before accepting. Leave the probe unserved.
+		return err
+	}
+
+	err = <-mainErrCh
+	stopProbeServer()
+	// A real main bind or serve failure must win over probe shutdown.
+	// http.ErrServerClosed is the main server's own graceful stop, so an
+	// independent probe failure can still be returned.
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	if serveErr := <-probeErrCh; serveErr != nil {
+		return serveErr
+	}
+	return err
+}
+
+func listenAndServeMain(server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
+	listeners, err := bindMainListeners(flags, logger)
+	if err != nil {
+		return err
+	}
+	defer closeListeners(listeners)
+	return ServeMultiple(listeners, server, flags, logger)
+}
+
+func bindMainListeners(flags *FlagConfig, logger *slog.Logger) ([]net.Listener, error) {
 	if flags.WebSystemdSocket != nil && *flags.WebSystemdSocket {
 		logger.Info("Listening on systemd activated listeners instead of port listeners.")
 		listeners, err := activation.Listeners()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if len(listeners) < 1 {
-			return errors.New("no socket activation file descriptors found")
+			return nil, errors.New("no socket activation file descriptors found")
 		}
-		return ServeMultiple(listeners, server, flags, logger)
+		return listeners, nil
 	}
 
 	listeners := make([]net.Listener, 0, len(*flags.WebListenAddresses))
 	for _, address := range *flags.WebListenAddresses {
-		var err error
-		var listener net.Listener
-		if strings.HasPrefix(address, "vsock://") {
-			port, err := parseVsockPort(address)
-			if err != nil {
-				return err
-			}
-			listener, err = vsock.Listen(port, nil)
-			if err != nil {
-				return err
-			}
-		} else {
-			listener, err = net.Listen("tcp", address)
-			if err != nil {
-				return err
-			}
+		listener, err := listenMainAddress(address)
+		if err != nil {
+			closeListeners(listeners)
+			return nil, err
 		}
-		defer listener.Close()
 		listeners = append(listeners, listener)
 	}
-	return ServeMultiple(listeners, server, flags, logger)
+	return listeners, nil
+}
+
+func listenMainAddress(address string) (net.Listener, error) {
+	if strings.HasPrefix(address, "vsock://") {
+		port, err := parseVsockPort(address)
+		if err != nil {
+			return nil, err
+		}
+		return vsock.Listen(port, nil)
+	}
+	return net.Listen("tcp", address)
+}
+
+func closeListeners(listeners []net.Listener) {
+	for _, listener := range listeners {
+		_ = listener.Close()
+	}
+}
+
+// acceptNotifyListener reports the first Accept so the probe server can wait
+// until a main listener is actually accepting.
+type acceptNotifyListener struct {
+	net.Listener
+	notify func()
+}
+
+func (l *acceptNotifyListener) Accept() (net.Conn, error) {
+	if l.notify != nil {
+		l.notify()
+		l.notify = nil
+	}
+	return l.Listener.Accept()
+}
+
+func notifyOnFirstAccept(listeners []net.Listener) ([]net.Listener, <-chan struct{}) {
+	ready := make(chan struct{})
+	var once sync.Once
+	signal := func() {
+		once.Do(func() { close(ready) })
+	}
+	wrapped := make([]net.Listener, len(listeners))
+	for i, listener := range listeners {
+		wrapped[i] = &acceptNotifyListener{Listener: listener, notify: signal}
+	}
+	return wrapped, ready
 }
 
 func parseVsockPort(address string) (uint32, error) {

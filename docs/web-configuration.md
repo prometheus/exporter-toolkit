@@ -161,3 +161,22 @@ authenticated HTTP request and then cached.
 Basic authentication is meant for simple use cases, with a few users.  If you
 need to authenticate a lot of users, it is recommended to use TLS client
 certificates, or to use a proper reverse proxy to handle the authentication.
+
+## Probe listener (optional)
+
+Some Prometheus ecosystem binaries can expose a **second TCP listener** for
+Kubernetes and other health checks when the main web port uses TLS, mutual TLS,
+or HTTP basic authentication.
+
+* Configure the listen address with `--web.probe-listen-address` (empty by
+  default, which disables the listener).
+* The probe listener serves **plain HTTP only**. It does not read
+  `tls_server_config` or `basic_auth_users` from the web configuration file,
+  and it does not apply `rate_limit` or `http_server_config` headers.
+* Which URL paths are served is decided in code by each binary (for example
+  `/-/healthy` and `/-/ready`). Operators cannot add paths such as `/metrics`
+  through the web configuration file.
+* Bind the address so the kubelet can reach the pod IP (for example `:9091` or
+  `0.0.0.0:9091`). Do not publish this port on a Kubernetes Service.
+
+`vsock://` addresses are not supported for the probe listener.
