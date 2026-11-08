@@ -24,6 +24,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -75,7 +76,8 @@ type TLSConfig struct {
 type FlagConfig struct {
 	// WebListenAddresses contains the listen addresses for the HTTP server.
 	WebListenAddresses *[]string
-	// WebSystemdSocket enables systemd socket activation listeners.
+	// WebSystemdSocket enables systemd socket activation listeners. They are also
+	// used without it when systemd passed sockets to the process.
 	WebSystemdSocket *bool
 	// WebConfigFile points to the TLS and authentication configuration file.
 	WebConfigFile *string
@@ -95,12 +97,30 @@ func (c *FlagConfig) checkFlags() error {
 	// enough: kingpinflag.AddFlags always hands out a non-nil pointer, so a
 	// nil-but-false flag would otherwise pass validation and then panic on the
 	// *flags.WebListenAddresses dereference in ListenAndServe.
-	if c.WebSystemdSocket == nil || !*c.WebSystemdSocket {
+	if !c.useSystemdSocket() {
 		if c.WebListenAddresses == nil || len(*c.WebListenAddresses) == 0 {
 			return ErrNoListeners
 		}
 	}
 	return nil
+}
+
+// useSystemdSocket reports whether to listen on systemd socket activation
+// listeners: when WebSystemdSocket is set, or when systemd passed sockets to
+// the process.
+func (c *FlagConfig) useSystemdSocket() bool {
+	return (c.WebSystemdSocket != nil && *c.WebSystemdSocket) || systemdSocketsPassed()
+}
+
+// systemdSocketsPassed reports whether systemd passed socket activation file
+// descriptors to this process, which it announces with the LISTEN_PID and
+// LISTEN_FDS environment variables. LISTEN_PID must be this process, so a
+// child process that inherited the variables doesn't take the sockets.
+func systemdSocketsPassed() bool {
+	if runtime.GOOS != "linux" {
+		return false
+	}
+	return os.Getenv("LISTEN_PID") == strconv.Itoa(os.Getpid()) && os.Getenv("LISTEN_FDS") != ""
 }
 
 // IsEnabled reports whether the TLSConfig configures TLS, i.e. whether at least
@@ -336,14 +356,14 @@ func ServeMultiple(listeners []net.Listener, server *http.Server, flags *FlagCon
 // the FlagConfig. When address starts looks like vsock://:{port}, it listens on
 // vsock. More info check https://wiki.qemu.org/Features/VirtioVsock .
 // Or instead uses systemd socket activated listeners if WebSystemdSocket in the
-// FlagConfig is true.
+// FlagConfig is true, or if systemd passed sockets to the process.
 // The FlagConfig is also passed on to ServeMultiple.
 func ListenAndServe(server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
 	if err := flags.checkFlags(); err != nil {
 		return err
 	}
 
-	if flags.WebSystemdSocket != nil && *flags.WebSystemdSocket {
+	if flags.useSystemdSocket() {
 		logger.Info("Listening on systemd activated listeners instead of port listeners.")
 		listeners, err := activation.Listeners()
 		if err != nil {
