@@ -46,22 +46,22 @@ var (
 type Config struct {
 	TLSConfig         TLSConfig                     `yaml:"tls_server_config"`
 	HTTPConfig        HTTPConfig                    `yaml:"http_server_config"`
-	RateLimiterConfig RateLimiterConfig             `yaml:"rate_limit"`
-	Users             map[string]config_util.Secret `yaml:"basic_auth_users"`
+	RateLimiterConfig RateLimiterConfig             `yaml:"rate_limit,omitempty"`
+	Users             map[string]config_util.Secret `yaml:"basic_auth_users,omitempty"`
 }
 
 type TLSConfig struct {
-	TLSCert          string             `yaml:"cert"`
-	TLSKey           config_util.Secret `yaml:"key"`
-	ClientCAsText    string             `yaml:"client_ca"`
-	TLSCertPath      string             `yaml:"cert_file"`
-	TLSKeyPath       string             `yaml:"key_file"`
-	ClientAuth       string             `yaml:"client_auth_type"`
-	ClientCAs        string             `yaml:"client_ca_file"`
-	CipherSuites     []Cipher           `yaml:"cipher_suites"`
-	CurvePreferences []Curve            `yaml:"curve_preferences"`
-	MinVersion       TLSVersion         `yaml:"min_version"`
-	MaxVersion       TLSVersion         `yaml:"max_version"`
+	TLSCert          string             `yaml:"cert,omitempty"`
+	TLSKey           config_util.Secret `yaml:"key,omitempty"`
+	ClientCAsText    string             `yaml:"client_ca,omitempty"`
+	TLSCertPath      string             `yaml:"cert_file,omitempty"`
+	TLSKeyPath       string             `yaml:"key_file,omitempty"`
+	ClientAuth       string             `yaml:"client_auth_type,omitempty"`
+	ClientCAs        string             `yaml:"client_ca_file,omitempty"`
+	CipherSuites     []Cipher           `yaml:"cipher_suites,omitempty"`
+	CurvePreferences []Curve            `yaml:"curve_preferences,omitempty"`
+	MinVersion       TLSVersion         `yaml:"min_version,omitempty"`
+	MaxVersion       TLSVersion         `yaml:"max_version,omitempty"`
 	// PreferServerCipherSuites is parsed and ignored.
 	//
 	// Deprecated: it used to be passed to tls.Config, whose field of the same
@@ -69,7 +69,7 @@ type TLSConfig struct {
 	// suite itself. The key is still accepted so that existing configuration
 	// files keep loading.
 	PreferServerCipherSuites bool     `yaml:"prefer_server_cipher_suites"`
-	ClientAllowedSans        []string `yaml:"client_allowed_sans"`
+	ClientAllowedSans        []string `yaml:"client_allowed_sans,omitempty"`
 }
 
 type FlagConfig struct {
@@ -156,8 +156,8 @@ type HTTPConfig struct {
 }
 
 type RateLimiterConfig struct {
-	Burst    int           `yaml:"burst"`
-	Interval time.Duration `yaml:"interval"`
+	Burst    int           `yaml:"burst,omitempty"`
+	Interval time.Duration `yaml:"interval,omitempty"`
 }
 
 func getConfig(configPath string) (*Config, error) {
