@@ -54,7 +54,7 @@ func TestResolveMetricsHandlerRejectsMultipleSources(t *testing.T) {
 	if err := tk.parse([]string{"--web.listen-address=:9100"}); err != nil {
 		t.Fatalf("unexpected parse error: %v", err)
 	}
-	if _, err := tk.resolveMetricsHandler(); err != errMultipleMetricsSource {
+	if _, err := tk.resolveMetricsHandler(); !errors.Is(err, errMultipleMetricsSource) {
 		t.Fatalf("unexpected error: got %v, want %v", err, errMultipleMetricsSource)
 	}
 }
