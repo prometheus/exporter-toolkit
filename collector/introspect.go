@@ -50,7 +50,7 @@ func (r *Registry[C, Cfg]) Report() Report {
 	out := Report{Namespace: r.namespace, Collectors: make([]State, 0, len(r.entries))}
 	for _, name := range slices.Sorted(maps.Keys(r.entries)) {
 		e := r.entries[name]
-		out.Collectors = append(out.Collectors, State{Descriptor: e.desc, Enabled: r.enabledLocked(e)})
+		out.Collectors = append(out.Collectors, State{Descriptor: e.desc.withOwnRequires(), Enabled: r.enabledLocked(e)})
 	}
 	return out
 }
@@ -86,12 +86,16 @@ func (r *Registry[C, Cfg]) WriteMarkdown(w io.Writer) error {
 			}
 		}
 
-		fmt.Fprintf(&b, "| `%s` | %s | %s |\n", d.Name, d.defaultState(), strings.ReplaceAll(notes, "|", `\|`))
+		fmt.Fprintf(&b, "| `%s` | %s | %s |\n", d.Name, d.defaultState(), markdownCell.Replace(notes))
 	}
 
 	_, err := io.WriteString(w, b.String())
 	return err
 }
+
+// markdownCell keeps free text inside one table cell: a `|` would start a new
+// column and a newline would end the table.
+var markdownCell = strings.NewReplacer("|", `\|`, "\r\n", " ", "\n", " ", "\r", " ")
 
 // EnabledMetrics returns a prometheus.Collector exposing
 // `<namespace>_collector_enabled{collector="<name>"}` as 1 or 0 for every

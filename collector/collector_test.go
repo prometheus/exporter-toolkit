@@ -17,6 +17,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -181,6 +182,80 @@ func TestBuildFilters(t *testing.T) {
 	}
 }
 
+func TestBuildRepeatedFilterBuildsOnce(t *testing.T) {
+	r := NewRegistry[*fakeCollector, fakeConfig]("test")
+	calls := 0
+	if err := r.Register(Descriptor{Name: "cpu", DefaultEnabled: true},
+		func(fakeConfig) (*fakeCollector, error) { calls++; return &fakeCollector{}, nil }); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+
+	if _, err := r.Build(StaticConfig(fakeConfig{}), "cpu", "cpu"); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if calls != 1 {
+		t.Errorf("factory ran %d times for collect[]=cpu&collect[]=cpu, want 1", calls)
+	}
+}
+
+func TestConcurrentFirstBuildRunsFactoryOnce(t *testing.T) {
+	r := NewRegistry[*fakeCollector, fakeConfig]("test")
+	var calls atomic.Int32
+	release := make(chan struct{})
+	if err := r.Register(Descriptor{Name: "cpu", DefaultEnabled: true},
+		func(fakeConfig) (*fakeCollector, error) {
+			calls.Add(1)
+			<-release
+			return &fakeCollector{}, nil
+		}); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+
+	results := make(chan *fakeCollector, 2)
+	for range 2 {
+		go func() {
+			built, err := r.Build(StaticConfig(fakeConfig{}))
+			if err != nil {
+				t.Errorf("Build: %v", err)
+			}
+			results <- built["cpu"]
+		}()
+	}
+	// Give the second Build time to reach the factory if nothing stops it.
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+
+	first, second := <-results, <-results
+	if calls.Load() != 1 {
+		t.Errorf("factory ran %d times for two concurrent first builds, want 1", calls.Load())
+	}
+	if first != second {
+		t.Error("concurrent builds returned different instances")
+	}
+}
+
+func TestBuildRetriesAfterFactoryError(t *testing.T) {
+	r := NewRegistry[*fakeCollector, fakeConfig]("test")
+	fail := true
+	if err := r.Register(Descriptor{Name: "cpu", DefaultEnabled: true},
+		func(fakeConfig) (*fakeCollector, error) {
+			if fail {
+				return nil, errors.New("boom")
+			}
+			return &fakeCollector{}, nil
+		}); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+
+	if _, err := r.Build(StaticConfig(fakeConfig{})); err == nil {
+		t.Fatal("first Build should fail")
+	}
+	fail = false
+	if built, err := r.Build(StaticConfig(fakeConfig{})); err != nil || built["cpu"] == nil {
+		t.Errorf("Build after a factory error = %v, %v, want a built cpu collector", built, err)
+	}
+}
+
 func TestBuildFactoryError(t *testing.T) {
 	r := NewRegistry[*fakeCollector, fakeConfig]("test")
 	if err := r.Register(Descriptor{Name: "broken", DefaultEnabled: true},
@@ -211,6 +286,20 @@ func TestReportIncludesDisabled(t *testing.T) {
 		t.Errorf("expected expensive listed and disabled, got %+v", report.Collectors[2])
 	}
 	if got := report.Collectors[2].Requires; !slices.Equal(got, []string{"an extension"}) {
+		t.Errorf("Requires = %v, want [an extension]", got)
+	}
+}
+
+func TestDescriptorsDoNotShareRequires(t *testing.T) {
+	requires := []string{"an extension"}
+	r := NewRegistry[*fakeCollector, fakeConfig]("test")
+	mustRegister(t, r, Descriptor{Name: "expensive", Requires: requires})
+
+	requires[0] = "changed by caller"
+	r.Descriptors()[0].Requires[0] = "changed via Descriptors"
+	r.Report().Collectors[0].Requires[0] = "changed via Report"
+
+	if got := r.Report().Collectors[0].Requires; !slices.Equal(got, []string{"an extension"}) {
 		t.Errorf("Requires = %v, want [an extension]", got)
 	}
 }
@@ -250,6 +339,19 @@ func TestWriteMarkdown(t *testing.T) {
 		"| `expensive` | disabled | Slow stats; requires an extension |\n"
 	if buf.String() != want {
 		t.Errorf("WriteMarkdown() =\n%s\nwant\n%s", buf.String(), want)
+	}
+}
+
+func TestWriteMarkdownKeepsRowOnOneLine(t *testing.T) {
+	r := NewRegistry[*fakeCollector, fakeConfig]("test")
+	mustRegister(t, r, Descriptor{Name: "cpu", Help: "Scrapes X.\nNeeds a|b."})
+
+	var buf strings.Builder
+	if err := r.WriteMarkdown(&buf); err != nil {
+		t.Fatalf("WriteMarkdown: %v", err)
+	}
+	if want := "| `cpu` | disabled | Scrapes X. Needs a\\|b. |\n"; !strings.HasSuffix(buf.String(), want) {
+		t.Errorf("WriteMarkdown() =\n%s\nwant last row %q", buf.String(), want)
 	}
 }
 

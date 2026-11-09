@@ -60,6 +60,13 @@ type Descriptor struct {
 	Requires []string `json:"requires,omitempty"`
 }
 
+// withOwnRequires returns d with a private copy of Requires, so callers and
+// the registry never share the slice's backing array.
+func (d Descriptor) withOwnRequires() Descriptor {
+	d.Requires = slices.Clone(d.Requires)
+	return d
+}
+
 func (d Descriptor) defaultState() string {
 	if d.DefaultEnabled {
 		return "enabled"
@@ -97,8 +104,11 @@ type entry[C any, Cfg any] struct {
 	// override is the operator's explicit choice, nil when they made none.
 	override  *bool
 	flagValue bool
-	built     bool
-	instance  C
+	// buildMtx serializes the first build of this collector, so concurrent
+	// scrapes run its factory once instead of leaking a dropped instance.
+	buildMtx sync.Mutex
+	built    bool
+	instance C
 }
 
 // NewRegistry returns an empty Registry. The namespace is used to prefix any
@@ -129,7 +139,7 @@ func (r *Registry[C, Cfg]) Register(d Descriptor, factory func(Cfg) (C, error)) 
 		return fmt.Errorf("collector: %q registered with a nil factory", d.Name)
 	}
 
-	r.entries[d.Name] = &entry[C, Cfg]{desc: d, factory: factory}
+	r.entries[d.Name] = &entry[C, Cfg]{desc: d.withOwnRequires(), factory: factory}
 	return nil
 }
 
@@ -192,7 +202,7 @@ func (r *Registry[C, Cfg]) SetEnabled(name string, enabled bool) error {
 
 	e, ok := r.entries[name]
 	if !ok {
-		return fmt.Errorf("unknown collector: %s", name)
+		return fmt.Errorf("collector: unknown collector %q", name)
 	}
 	e.override = &enabled
 	return nil
@@ -222,7 +232,7 @@ func (r *Registry[C, Cfg]) Descriptors() []Descriptor {
 
 	out := make([]Descriptor, 0, len(r.entries))
 	for _, name := range slices.Sorted(maps.Keys(r.entries)) {
-		out = append(out, r.entries[name].desc)
+		out = append(out, r.entries[name].desc.withOwnRequires())
 	}
 	return out
 }
@@ -262,39 +272,55 @@ func (r *Registry[C, Cfg]) Build(cfgFor func(name string) Cfg, filters ...string
 		return nil, err
 	}
 
-	// Factories and cfgFor run without the lock, so they can call back into
-	// the registry and a slow factory does not block other callers.
+	// Factories and cfgFor run without r.mtx, so they can call back into the
+	// registry and a slow factory does not block other collectors.
 	for _, e := range unbuilt {
-		c, err := e.factory(cfgFor(e.desc.Name))
+		instance, err := r.buildOnce(e, cfgFor)
 		if err != nil {
-			return nil, fmt.Errorf("couldn't create collector %s: %w", e.desc.Name, err)
+			return nil, err
 		}
-
-		r.mtx.Lock()
-		// ponytail: two concurrent first builds both run the factory and the
-		// loser's instance is dropped; add per-entry sync.Once if a factory
-		// opens handles that must be closed.
-		if !e.built {
-			e.instance, e.built = c, true
-		}
-		out[e.desc.Name] = e.instance
-		r.mtx.Unlock()
+		out[e.desc.Name] = instance
 	}
 	return out, nil
+}
+
+// buildOnce runs e's factory unless a concurrent Build already did. A factory
+// error is not cached, so the next Build tries again.
+func (r *Registry[C, Cfg]) buildOnce(e *entry[C, Cfg], cfgFor func(name string) Cfg) (C, error) {
+	e.buildMtx.Lock()
+	defer e.buildMtx.Unlock()
+
+	r.mtx.Lock()
+	built, instance := e.built, e.instance
+	r.mtx.Unlock()
+	if built {
+		return instance, nil
+	}
+
+	instance, err := e.factory(cfgFor(e.desc.Name))
+	if err != nil {
+		return instance, fmt.Errorf("couldn't create collector %s: %w", e.desc.Name, err)
+	}
+
+	r.mtx.Lock()
+	e.instance, e.built = instance, true
+	r.mtx.Unlock()
+	return instance, nil
 }
 
 func (r *Registry[C, Cfg]) selectForBuild(filters []string) (map[string]C, []*entry[C, Cfg], error) {
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
 
-	names := filters
-	for _, f := range filters {
-		e, ok := r.entries[f]
+	// collect[] may repeat a name; build each collector once.
+	names := slices.Compact(slices.Sorted(slices.Values(filters)))
+	for _, name := range names {
+		e, ok := r.entries[name]
 		if !ok {
-			return nil, nil, fmt.Errorf("missing collector: %s", f)
+			return nil, nil, fmt.Errorf("collector: unknown collector %q", name)
 		}
 		if !r.enabledLocked(e) {
-			return nil, nil, fmt.Errorf("disabled collector: %s", f)
+			return nil, nil, fmt.Errorf("collector: disabled collector %q", name)
 		}
 	}
 	if len(filters) == 0 {
