@@ -127,7 +127,7 @@ func (t *TLSConfig) VerifyPeerCertificate(rawCerts [][]byte, _ [][]*x509.Certifi
 	// sender cert comes first, see https://www.rfc-editor.org/rfc/rfc5246#section-7.4.2
 	cert, err := x509.ParseCertificate(rawCerts[0])
 	if err != nil {
-		return fmt.Errorf("error parsing client certificate: %s", err)
+		return fmt.Errorf("error parsing client certificate: %w", err)
 	}
 
 	// Build up a slice of strings with all Subject Alternate Name values
@@ -218,7 +218,7 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 		if c.TLSCertPath != "" {
 			certData, err = os.ReadFile(c.TLSCertPath)
 			if err != nil {
-				return nil, fmt.Errorf("failed to read cert_file (%s): %s", c.TLSCertPath, err)
+				return nil, fmt.Errorf("failed to read cert_file (%s): %w", c.TLSCertPath, err)
 			}
 		} else {
 			certData = []byte(c.TLSCert)
@@ -227,7 +227,7 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 		if c.TLSKeyPath != "" {
 			keyData, err = os.ReadFile(c.TLSKeyPath)
 			if err != nil {
-				return nil, fmt.Errorf("failed to read key_file (%s): %s", c.TLSKeyPath, err)
+				return nil, fmt.Errorf("failed to read key_file (%s): %w", c.TLSKeyPath, err)
 			}
 		} else {
 			keyData = []byte(c.TLSKey)
@@ -248,8 +248,8 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 	// c.PreferServerCipherSuites is deliberately not passed on: the tls.Config
 	// field of that name has had no effect since Go 1.17.
 	cfg := &tls.Config{
-		MinVersion: (uint16)(c.MinVersion),
-		MaxVersion: (uint16)(c.MaxVersion),
+		MinVersion: uint16(c.MinVersion),
+		MaxVersion: uint16(c.MaxVersion),
 	}
 
 	cfg.GetCertificate = func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
@@ -258,7 +258,7 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 
 	var cf []uint16
 	for _, c := range c.CipherSuites {
-		cf = append(cf, (uint16)(c))
+		cf = append(cf, uint16(c))
 	}
 	if len(cf) > 0 {
 		cfg.CipherSuites = cf
@@ -266,7 +266,7 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 
 	var cp []tls.CurveID
 	for _, c := range c.CurvePreferences {
-		cp = append(cp, (tls.CurveID)(c))
+		cp = append(cp, tls.CurveID(c))
 	}
 	if len(cp) > 0 {
 		cfg.CurvePreferences = cp
@@ -449,13 +449,13 @@ func configureServer(server *http.Server, flags *FlagConfig, logger *slog.Logger
 	}
 
 	config, err := ConfigToTLSConfig(&c.TLSConfig)
-	switch err {
-	case nil:
+	switch {
+	case err == nil:
 		// Valid TLS config.
 		if !c.HTTPConfig.HTTP2 {
 			server.TLSNextProto = make(map[string]func(*http.Server, *tls.Conn, http.Handler))
 		}
-	case errNoTLSConfig:
+	case errors.Is(err, errNoTLSConfig):
 		// No TLS config, back to plain HTTP.
 		return nil, nil
 	default:
@@ -537,7 +537,7 @@ func Validate(tlsConfigPath string) error {
 		return err
 	}
 	_, err = ConfigToTLSConfig(&c.TLSConfig)
-	if err == errNoTLSConfig {
+	if errors.Is(err, errNoTLSConfig) {
 		return nil
 	}
 	return err
@@ -553,7 +553,7 @@ func (c *Cipher) UnmarshalYAML(unmarshal func(any) error) error {
 	}
 	for _, cs := range tls.CipherSuites() {
 		if cs.Name == s {
-			*c = (Cipher)(cs.ID)
+			*c = Cipher(cs.ID)
 			return nil
 		}
 	}
@@ -561,16 +561,16 @@ func (c *Cipher) UnmarshalYAML(unmarshal func(any) error) error {
 }
 
 func (c Cipher) MarshalYAML() (any, error) {
-	return tls.CipherSuiteName((uint16)(c)), nil
+	return tls.CipherSuiteName(uint16(c)), nil
 }
 
 type Curve tls.CurveID
 
 var curves = map[string]Curve{
-	"CurveP256": (Curve)(tls.CurveP256),
-	"CurveP384": (Curve)(tls.CurveP384),
-	"CurveP521": (Curve)(tls.CurveP521),
-	"X25519":    (Curve)(tls.X25519),
+	"CurveP256": Curve(tls.CurveP256),
+	"CurveP384": Curve(tls.CurveP384),
+	"CurveP521": Curve(tls.CurveP521),
+	"X25519":    Curve(tls.X25519),
 }
 
 func (c *Curve) UnmarshalYAML(unmarshal func(any) error) error {
@@ -598,10 +598,10 @@ func (c *Curve) MarshalYAML() (any, error) {
 type TLSVersion uint16
 
 var tlsVersions = map[string]TLSVersion{
-	"TLS13": (TLSVersion)(tls.VersionTLS13),
-	"TLS12": (TLSVersion)(tls.VersionTLS12),
-	"TLS11": (TLSVersion)(tls.VersionTLS11),
-	"TLS10": (TLSVersion)(tls.VersionTLS10),
+	"TLS13": TLSVersion(tls.VersionTLS13),
+	"TLS12": TLSVersion(tls.VersionTLS12),
+	"TLS11": TLSVersion(tls.VersionTLS11),
+	"TLS10": TLSVersion(tls.VersionTLS10),
 }
 
 func (tv *TLSVersion) UnmarshalYAML(unmarshal func(any) error) error {

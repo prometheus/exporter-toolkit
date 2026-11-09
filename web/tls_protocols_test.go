@@ -113,7 +113,7 @@ func TestServeTLSProtocols(t *testing.T) {
 			}
 			configPath := filepath.Join(t.TempDir(), "web.yml")
 			config := fmt.Sprintf("tls_server_config:\n  cert_file: %q\n  key_file: %q\nhttp_server_config:\n  http2: %t\n", filepath.Join(dir, "server.crt"), filepath.Join(dir, "server.key"), !tc.disableHTTP2)
-			if err := os.WriteFile(configPath, []byte(config), 0600); err != nil {
+			if err := os.WriteFile(configPath, []byte(config), 0o600); err != nil {
 				t.Fatal(err)
 			}
 			server := &http.Server{Protocols: tc.protocols, TLSNextProto: tc.nextProto}
@@ -284,7 +284,7 @@ func TestServeTLSProtocolsAfterReload(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name string, data []byte) {
 		t.Helper()
-		if err := os.WriteFile(filepath.Join(dir, name), data, 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -31,9 +31,10 @@ import (
 	"github.com/prometheus/common/promslog"
 	promslogflag "github.com/prometheus/common/promslog/flag"
 	"github.com/prometheus/common/version"
+	"golang.org/x/time/rate"
+
 	"github.com/prometheus/exporter-toolkit/web"
 	"github.com/prometheus/exporter-toolkit/web/kingpinflag"
-	"golang.org/x/time/rate"
 )
 
 var (

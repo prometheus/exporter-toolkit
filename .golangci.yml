@@ -1,11 +1,21 @@
 formatters:
   enable:
+    - gofumpt
     - goimports
+  settings:
+    gofumpt:
+      extra:
+        group-params: true
+    goimports:
+      local-prefixes:
+        - github.com/prometheus/exporter-toolkit
 linters:
   enable:
+    - errorlint
     - misspell
     - modernize
     - revive
+    - sloglint
     # Correctness linters (low-noise, no findings on the current tree).
     - copyloopvar
     - durationcheck
@@ -24,7 +34,6 @@ linters:
       - linters:
           - errcheck
         path: _test.go
-    warn-unused: true
   settings:
     errcheck:
       exclude-functions:
@@ -37,8 +46,4 @@ linters:
         - fieldalignment
         # err shadowing is idiomatic and used throughout the codebase.
         - shadow
-    staticcheck:
-      checks:
-        - all
-        - -ST1005 # FIXME: Incorrectly formatted error string
 version: "2"

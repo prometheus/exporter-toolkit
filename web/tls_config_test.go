@@ -449,7 +449,6 @@ func TestConfigReloading(t *testing.T) {
 		if err != nil {
 			recordConnectionError(errors.New("connection failed but should have been accepted"))
 		} else {
-
 			recordConnectionError(nil)
 		}
 	}
@@ -529,7 +528,6 @@ func (test *TestInputs) Test(t *testing.T) {
 		for req := 0; req <= test.Requests; req++ {
 
 			r, err := ClientConnection()
-
 			if err != nil {
 				recordConnectionError(err)
 				return
@@ -640,11 +638,11 @@ func swapFileContents(file1, file2 string) error {
 	if err != nil {
 		return err
 	}
-	err = os.WriteFile(file1, content2, 0644)
+	err = os.WriteFile(file1, content2, 0o644)
 	if err != nil {
 		return err
 	}
-	err = os.WriteFile(file2, content1, 0644)
+	err = os.WriteFile(file2, content1, 0o644)
 	if err != nil {
 		return err
 	}
