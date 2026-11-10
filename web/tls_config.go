@@ -31,7 +31,7 @@ import (
 
 	"github.com/coreos/go-systemd/v22/activation"
 	"github.com/mdlayher/vsock"
-	config_util "github.com/prometheus/common/config"
+	"github.com/prometheus/common/config/secret"
 	"go.yaml.in/yaml/v2"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
@@ -44,24 +44,24 @@ var (
 )
 
 type Config struct {
-	TLSConfig         TLSConfig                     `yaml:"tls_server_config"`
-	HTTPConfig        HTTPConfig                    `yaml:"http_server_config"`
-	RateLimiterConfig RateLimiterConfig             `yaml:"rate_limit"`
-	Users             map[string]config_util.Secret `yaml:"basic_auth_users"`
+	TLSConfig         TLSConfig                `yaml:"tls_server_config"`
+	HTTPConfig        HTTPConfig               `yaml:"http_server_config"`
+	RateLimiterConfig RateLimiterConfig        `yaml:"rate_limit"`
+	Users             map[string]secret.Secret `yaml:"basic_auth_users"`
 }
 
 type TLSConfig struct {
-	TLSCert          string             `yaml:"cert"`
-	TLSKey           config_util.Secret `yaml:"key"`
-	ClientCAsText    string             `yaml:"client_ca"`
-	TLSCertPath      string             `yaml:"cert_file"`
-	TLSKeyPath       string             `yaml:"key_file"`
-	ClientAuth       string             `yaml:"client_auth_type"`
-	ClientCAs        string             `yaml:"client_ca_file"`
-	CipherSuites     []Cipher           `yaml:"cipher_suites"`
-	CurvePreferences []Curve            `yaml:"curve_preferences"`
-	MinVersion       TLSVersion         `yaml:"min_version"`
-	MaxVersion       TLSVersion         `yaml:"max_version"`
+	TLSCert          string        `yaml:"cert"`
+	TLSKey           secret.Secret `yaml:"key"`
+	ClientCAsText    string        `yaml:"client_ca"`
+	TLSCertPath      string        `yaml:"cert_file"`
+	TLSKeyPath       string        `yaml:"key_file"`
+	ClientAuth       string        `yaml:"client_auth_type"`
+	ClientCAs        string        `yaml:"client_ca_file"`
+	CipherSuites     []Cipher      `yaml:"cipher_suites"`
+	CurvePreferences []Curve       `yaml:"curve_preferences"`
+	MinVersion       TLSVersion    `yaml:"min_version"`
+	MaxVersion       TLSVersion    `yaml:"max_version"`
 	// PreferServerCipherSuites is parsed and ignored.
 	//
 	// Deprecated: it used to be passed to tls.Config, whose field of the same
@@ -115,11 +115,20 @@ func (t *TLSConfig) IsEnabled() bool {
 		t.ClientAuth != ""
 }
 
+// joinDir joins dir and path if path is relative. An empty or absolute path
+// is returned unchanged.
+func joinDir(dir, path string) string {
+	if path == "" || filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(dir, path)
+}
+
 // SetDirectory joins any relative file paths with dir.
 func (t *TLSConfig) SetDirectory(dir string) {
-	t.TLSCertPath = config_util.JoinDir(dir, t.TLSCertPath)
-	t.TLSKeyPath = config_util.JoinDir(dir, t.TLSKeyPath)
-	t.ClientCAs = config_util.JoinDir(dir, t.ClientCAs)
+	t.TLSCertPath = joinDir(dir, t.TLSCertPath)
+	t.TLSKeyPath = joinDir(dir, t.TLSKeyPath)
+	t.ClientCAs = joinDir(dir, t.ClientCAs)
 }
 
 // VerifyPeerCertificate will check the SAN entries of the client cert if there is configuration for it
