@@ -28,6 +28,9 @@ import (
 	"time"
 
 	"github.com/alecthomas/kingpin/v2"
+	"github.com/prometheus/client_golang/prometheus"
+	promcollectors "github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/promslog"
 	promslogflag "github.com/prometheus/common/promslog/flag"
 	"github.com/prometheus/common/version"
@@ -70,6 +73,8 @@ type MetricsHandlerFactory func(*Bootstrap) (http.Handler, error)
 // Bootstrap captures parsed startup options that handler factories can use to
 // construct exporter-specific HTTP handlers after CLI parsing.
 type Bootstrap struct {
+	// Registry is the Prometheus metrics registry for the exporter.
+	Registry *prometheus.Registry
 	// Logger is the configured logger for the exporter process.
 	Logger *slog.Logger
 	// MetricsPath is the parsed value of --web.telemetry-path.
@@ -77,6 +82,9 @@ type Bootstrap struct {
 	// FlagConfig contains the parsed exporter-toolkit web flags.
 	FlagConfig *web.FlagConfig
 	// DisableExporterMetrics is the parsed value of --web.disable-exporter-metrics.
+	//
+	// Deprecated: This is no loger exported. Handling of this flag is now internal
+	// to the bootstrap.
 	DisableExporterMetrics bool
 	// MaxRequests is the parsed value of --web.max-requests.
 	MaxRequests int
@@ -154,6 +162,9 @@ type Config struct {
 	Description string
 	// DefaultAddress is the default value for --web.listen-address.
 	DefaultAddress string
+	// Registry is the Prometheus metrics registry for the exporter. When nil the
+	// toolkit will create a new empty registry.
+	Registry *prometheus.Registry
 	// Logger is the logger to use. When nil, toolkit configures promslog flags
 	// and builds a logger during Parse.
 	Logger *slog.Logger
@@ -180,6 +191,8 @@ type Runner struct {
 	maxRequests            *int
 	enablePprof            *bool
 
+	// Registry is the Prometheus metrics registry for the exporter.
+	Registry *prometheus.Registry
 	// Logger is the resolved logger after parsing configuration.
 	Logger *slog.Logger
 	// MetricsPath is the parsed value of --web.telemetry-path.
@@ -187,6 +200,9 @@ type Runner struct {
 	// FlagConfig contains the parsed exporter-toolkit web flags.
 	FlagConfig *web.FlagConfig
 	// DisableExporterMetrics is the parsed value of --web.disable-exporter-metrics.
+	//
+	// Deprecated: This is no loger exported. Handling of this flag is now internal
+	// to the bootstrap.
 	DisableExporterMetrics bool
 	// MaxRequests is the parsed value of --web.max-requests.
 	MaxRequests int
@@ -240,6 +256,10 @@ func New(c Config) *Runner {
 		).Default("true").Bool(),
 	}
 
+	if c.Registry == nil {
+		t.Registry = prometheus.NewRegistry()
+	}
+
 	if c.Logger == nil {
 		t.logConfig = &promslog.Config{}
 		promslogflag.AddFlags(app, t.logConfig)
@@ -267,8 +287,8 @@ func (t *Runner) parse(args []string) error {
 	if t.Logger == nil {
 		t.Logger = promslog.New(t.logConfig)
 	}
+
 	t.MetricsPath = *t.metricsPath
-	t.DisableExporterMetrics = *t.disableExporterMetrics
 	t.MaxRequests = *t.maxRequests
 	t.EnablePprof = *t.enablePprof
 	t.LandingConfig = t.defaultLandingConfig()
@@ -288,6 +308,14 @@ func (t *Runner) runWithArgs(args []string) error {
 	handler, err := t.resolveMetricsHandler()
 	if err != nil {
 		return err
+	}
+	if !*t.disableExporterMetrics {
+		t.Logger.Debug("Enabling exporter metrics")
+		t.Registry.MustRegister(
+			promcollectors.NewProcessCollector(promcollectors.ProcessCollectorOpts{}),
+			promcollectors.NewGoCollector(),
+		)
+		handler = promhttp.InstrumentMetricHandler(t.Registry, handler)
 	}
 	server, err := t.newServer(handler)
 	if err != nil {
@@ -316,11 +344,11 @@ func (t *Runner) resolveMetricsHandler() (http.Handler, error) {
 	}
 	if t.MetricsHandlerFactory != nil {
 		t.bootstrap = &Bootstrap{
-			Logger:                 t.Logger,
-			MetricsPath:            t.MetricsPath,
-			FlagConfig:             t.FlagConfig,
-			DisableExporterMetrics: t.DisableExporterMetrics,
-			MaxRequests:            t.MaxRequests,
+			Registry:    t.Registry,
+			Logger:      t.Logger,
+			MetricsPath: t.MetricsPath,
+			FlagConfig:  t.FlagConfig,
+			MaxRequests: t.MaxRequests,
 		}
 		return t.MetricsHandlerFactory(t.bootstrap)
 	}
