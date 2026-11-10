@@ -454,3 +454,10 @@ func TestRunOneshotReportsHandlerErrors(t *testing.T) {
 		t.Fatalf("stdout = %q, want nothing on error", stdout.String())
 	}
 }
+
+func TestBufferedResponseIsFlusher(t *testing.T) {
+	var w http.ResponseWriter = &bufferedResponse{header: http.Header{}}
+	if _, ok := w.(http.Flusher); !ok {
+		t.Fatal("bufferedResponse should implement http.Flusher")
+	}
+}

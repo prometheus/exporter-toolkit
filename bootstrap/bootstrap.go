@@ -360,6 +360,9 @@ func (w *bufferedResponse) Write(b []byte) (int, error) {
 	return w.body.Write(b)
 }
 
+// Flush is a no-op, so handlers that assert http.Flusher also work with --oneshot.
+func (*bufferedResponse) Flush() {}
+
 func (t *Runner) resolveMetricsHandler() (http.Handler, error) {
 	sources := 0
 	if t.MetricsHandler != nil {
