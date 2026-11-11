@@ -20,10 +20,16 @@ on:
   schedule:
     - cron: '26 14 * * 1'
 
+permissions:
+  contents: read
+
 jobs:
   analyze:
     name: Analyze
     runs-on: ubuntu-latest
+    permissions:
+      contents: read  # for actions/checkout
+      security-events: write  # for uploading CodeQL results
 
     strategy:
       fail-fast: false
@@ -34,7 +40,9 @@ jobs:
         # https://docs.github.com/en/free-pro-team@latest/github/finding-security-vulnerabilities-and-errors-in-your-code/configuring-code-scanning#changing-the-languages-that-are-analyzed
 
     steps:
-      - name: Checkout repository
+      # Checkout v7 stores credentials in RUNNER_TEMP; CodeQL uploads only
+      # analysis results, database bundles and logs, not the credentials file.
+      - name: Checkout repository # zizmor: ignore[artipacked]
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       # Initializes the CodeQL tools for scanning.

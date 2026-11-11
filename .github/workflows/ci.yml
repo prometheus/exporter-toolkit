@@ -21,7 +21,9 @@ jobs:
     container:
       image: quay.io/prometheus/golang-builder:${{ matrix.go_version }}-base
     steps:
-      - name: Checkout repository
+      # Checkout v7 stores credentials in RUNNER_TEMP; this read-only job
+      # uploads no artifacts and only caches Go build and module directories.
+      - name: Checkout repository # zizmor: ignore[artipacked]
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - uses: prometheus/promci-setup@55bd31fe92710532260eb57c554f2697363285c5 # v0.2.2
       - run: make test
