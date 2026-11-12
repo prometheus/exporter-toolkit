@@ -17,14 +17,17 @@
 package bootstrap
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/pprof"
 	"os"
+	"os/signal"
 	"slices"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/alecthomas/kingpin/v2"
@@ -296,6 +299,7 @@ func (t *Runner) parse(args []string) error {
 }
 
 // Run parses os.Args and starts serving the configured exporter endpoints.
+// It returns nil once SIGINT or SIGTERM has shut the server down gracefully.
 func (t *Runner) Run() error {
 	return t.runWithArgs(os.Args[1:])
 }
@@ -325,7 +329,37 @@ func (t *Runner) runWithArgs(args []string) error {
 		t.Logger.Info("Starting "+t.provided.Name, "version", version.Info())
 		t.Logger.Info("Build context", "build_context", version.BuildContext())
 	}
-	return web.ListenAndServe(server, t.FlagConfig, t.Logger)
+	return serveUntilSignal(server, t.Logger, func() error {
+		return web.ListenAndServe(server, t.FlagConfig, t.Logger)
+	}, os.Interrupt, syscall.SIGTERM)
+}
+
+// serveUntilSignal runs serve until it fails or one of sigs arrives. On a
+// signal it shuts server down gracefully and returns nil, so the process can
+// exit with status 0 instead of being killed by the signal.
+func serveUntilSignal(server *http.Server, logger *slog.Logger, serve func() error, sigs ...os.Signal) error {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, sigs...)
+	defer signal.Stop(sigCh)
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- serve() }()
+
+	select {
+	case err := <-errCh:
+		return err
+	case sig := <-sigCh:
+		// Restore the default action so a second signal still kills a stuck shutdown.
+		signal.Stop(sigCh)
+		logger.Info("Received signal, shutting down", "signal", sig)
+		if err := server.Shutdown(context.Background()); err != nil {
+			return err
+		}
+		if err := <-errCh; err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
+	}
 }
 
 func (t *Runner) resolveMetricsHandler() (http.Handler, error) {
