@@ -10,7 +10,7 @@ require (
 	github.com/prometheus/common v0.73.1
 	go.yaml.in/yaml/v2 v2.4.5
 	golang.org/x/crypto v0.58.0
-	golang.org/x/sync v0.24.0
+	golang.org/x/sync v0.25.0
 	golang.org/x/time v0.16.0
 )
 
