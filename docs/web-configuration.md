@@ -11,6 +11,9 @@ defined by the scheme described below.
 Brackets indicate that a parameter is optional. For non-list parameters the
 value is set to the specified default.
 
+The `http_server_config` section is optional. If it is omitted, HTTP/2 support
+remains enabled for TLS connections and no custom response headers are added.
+
 The file is read upon every http request, such as any change in the
 configuration, so the certificates are picked up immediately.
 
@@ -95,7 +98,7 @@ tls_server_config:
   [ curve_preferences:
     [ - <string> ] ]
 
-http_server_config:
+[ http_server_config:
   # Enable HTTP/2 support. Note that HTTP/2 is only supported with TLS.
   # This can not be changed on the fly.
   [ http2: <boolean> | default = true ]
@@ -122,7 +125,7 @@ http_server_config:
     # browsers to load Prometheus and the other applications hosted on the same
     # domain and subdomains over HTTPS.
     # https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security
-    [ Strict-Transport-Security: <string> ] ]
+    [ Strict-Transport-Security: <string> ] ] ]
 
 # Usernames and hashed passwords that have full access to the web
 # server via basic authentication. If empty, no basic authentication is
