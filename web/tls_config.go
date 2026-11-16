@@ -272,30 +272,6 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 		cfg.CurvePreferences = cp
 	}
 
-	// clientCAsErr records that a client CA was configured but held no usable
-	// certificate. It is reported after the client auth policy has been
-	// validated, so that a configuration carrying both faults keeps reporting
-	// the policy one, and only for policies that verify client certificates
-	// against the pool.
-	var clientCAsErr error
-	if c.ClientCAs != "" {
-		clientCAPool := x509.NewCertPool()
-		clientCAFile, err := os.ReadFile(c.ClientCAs)
-		if err != nil {
-			return nil, err
-		}
-		if !clientCAPool.AppendCertsFromPEM(clientCAFile) {
-			clientCAsErr = fmt.Errorf("no client CA certificates found in client_ca_file (%s)", c.ClientCAs)
-		}
-		cfg.ClientCAs = clientCAPool
-	} else if c.ClientCAsText != "" {
-		clientCAPool := x509.NewCertPool()
-		if !clientCAPool.AppendCertsFromPEM([]byte(c.ClientCAsText)) {
-			clientCAsErr = errors.New("no client CA certificates found in client_ca")
-		}
-		cfg.ClientCAs = clientCAPool
-	}
-
 	if c.ClientAllowedSans != nil {
 		// verify that the client cert contains an allowed SAN
 		cfg.VerifyPeerCertificate = c.VerifyPeerCertificate
@@ -316,12 +292,28 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 		return nil, errors.New("invalid ClientAuth: " + c.ClientAuth)
 	}
 
-	if (c.ClientCAs != "" || c.ClientCAsText != "") && cfg.ClientAuth == tls.NoClientCert {
-		return nil, errors.New("client CA's have been configured without a Client Auth Policy")
+	if c.ClientCAs != "" || c.ClientCAsText != "" {
+		clientCAPEM, clientCASource := []byte(c.ClientCAsText), "client_ca"
+		if c.ClientCAs != "" {
+			b, err := os.ReadFile(c.ClientCAs)
+			if err != nil {
+				return nil, err
+			}
+			clientCAPEM, clientCASource = b, fmt.Sprintf("client_ca_file (%s)", c.ClientCAs)
+		}
+		clientCAPool := x509.NewCertPool()
+		// An empty pool only matters to policies that verify client
+		// certificates against it; for the others it is merely a hint.
+		verifiesClientCerts := cfg.ClientAuth == tls.VerifyClientCertIfGiven ||
+			cfg.ClientAuth == tls.RequireAndVerifyClientCert
+		if !clientCAPool.AppendCertsFromPEM(clientCAPEM) && verifiesClientCerts {
+			return nil, fmt.Errorf("no client CA certificates found in %s", clientCASource)
+		}
+		cfg.ClientCAs = clientCAPool
 	}
 
-	if clientCAsErr != nil && (cfg.ClientAuth == tls.VerifyClientCertIfGiven || cfg.ClientAuth == tls.RequireAndVerifyClientCert) {
-		return nil, clientCAsErr
+	if (c.ClientCAs != "" || c.ClientCAsText != "") && cfg.ClientAuth == tls.NoClientCert {
+		return nil, errors.New("client CA's have been configured without a Client Auth Policy")
 	}
 
 	return cfg, nil
