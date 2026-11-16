@@ -879,8 +879,6 @@ func (b *syncBuffer) String() string {
 	return b.buf.String()
 }
 
-// TestVerifyPeerCertificateWithoutClientCert checks that an empty rawCerts is an
-// error rather than a panic.
 func TestVerifyPeerCertificateWithoutClientCert(t *testing.T) {
 	c := &TLSConfig{ClientAllowedSans: []string{"one"}}
 
@@ -903,8 +901,6 @@ func TestVerifyPeerCertificateWithoutClientCert(t *testing.T) {
 	}
 }
 
-// TestVerifyPeerCertificateHandshakeWithoutClientCert checks that the server
-// rejects a client that presents no certificate without panicking.
 func TestVerifyPeerCertificateHandshakeWithoutClientCert(t *testing.T) {
 	cert, err := tls.LoadX509KeyPair("testdata/server.crt", "testdata/server.key")
 	if err != nil {
@@ -913,8 +909,7 @@ func TestVerifyPeerCertificateHandshakeWithoutClientCert(t *testing.T) {
 
 	tlsConfig := &TLSConfig{ClientAllowedSans: []string{"one"}}
 	listener, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		// Tolerates a client that sends no certificate, leaving rawCerts empty.
+		Certificates:          []tls.Certificate{cert},
 		ClientAuth:            tls.VerifyClientCertIfGiven,
 		VerifyPeerCertificate: tlsConfig.VerifyPeerCertificate,
 		MinVersion:            tls.VersionTLS12,
@@ -944,8 +939,7 @@ func TestVerifyPeerCertificateHandshakeWithoutClientCert(t *testing.T) {
 		r.err = conn.(*tls.Conn).Handshake()
 	}()
 
-	// Under TLS 1.3 the dial can succeed before the server rejects the
-	// handshake, so only the server side is checked.
+	// Under TLS 1.3 the dial may succeed, so only check the server side.
 	clientConfig := getTLSClient("").Transport.(*http.Transport).TLSClientConfig
 	clientConfig.ServerName = "localhost"
 	clientConn, err := tls.Dial("tcp", listener.Addr().String(), clientConfig)
