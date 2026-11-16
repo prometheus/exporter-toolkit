@@ -95,9 +95,8 @@ func (u *webHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Configure http headers. This happens before any request is turned away,
-	// so that the configured headers are present on every response and not
-	// only on the ones that reach the wrapped handler.
+	// Configure http headers before any early return, so that every response
+	// served with a loaded config carries them, including rate limited ones.
 	for k, v := range c.HTTPConfig.Header {
 		w.Header().Set(k, v)
 	}
