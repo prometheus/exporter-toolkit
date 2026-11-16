@@ -275,7 +275,8 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 	// clientCAsErr records that a client CA was configured but held no usable
 	// certificate. It is reported after the client auth policy has been
 	// validated, so that a configuration carrying both faults keeps reporting
-	// the policy one.
+	// the policy one, and only for policies that verify client certificates
+	// against the pool.
 	var clientCAsErr error
 	if c.ClientCAs != "" {
 		clientCAPool := x509.NewCertPool()
@@ -319,7 +320,7 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 		return nil, errors.New("client CA's have been configured without a Client Auth Policy")
 	}
 
-	if clientCAsErr != nil {
+	if clientCAsErr != nil && (cfg.ClientAuth == tls.VerifyClientCertIfGiven || cfg.ClientAuth == tls.RequireAndVerifyClientCert) {
 		return nil, clientCAsErr
 	}
 

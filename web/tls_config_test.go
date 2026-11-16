@@ -206,6 +206,25 @@ func TestYAMLFiles(t *testing.T) {
 	}
 }
 
+// TestClientCAWithoutCertificatesUnverified checks that a client CA holding no
+// certificates is only rejected by client auth policies that verify client
+// certificates against it.
+func TestClientCAWithoutCertificatesUnverified(t *testing.T) {
+	for _, clientAuth := range []string{"RequestClientCert", "RequireAnyClientCert"} {
+		t.Run(clientAuth, func(t *testing.T) {
+			c := &TLSConfig{
+				TLSCertPath:   "testdata/server.crt",
+				TLSKeyPath:    "testdata/server.key",
+				ClientAuth:    clientAuth,
+				ClientCAsText: "this is not a PEM encoded certificate",
+			}
+			if _, err := ConfigToTLSConfig(c); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 func TestServerBehaviour(t *testing.T) {
 	testTables := []*TestInputs{
 		{
