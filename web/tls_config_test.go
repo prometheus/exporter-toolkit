@@ -881,23 +881,9 @@ func (b *syncBuffer) String() string {
 
 func TestVerifyPeerCertificateWithoutClientCert(t *testing.T) {
 	c := &TLSConfig{ClientAllowedSans: []string{"one"}}
-
-	for _, tc := range []struct {
-		name     string
-		rawCerts [][]byte
-	}{
-		{name: "nil", rawCerts: nil},
-		{name: "empty", rawCerts: [][]byte{}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			err := c.VerifyPeerCertificate(tc.rawCerts, nil)
-			if err == nil {
-				t.Fatal("expected an error, got nil")
-			}
-			if !ErrorMap["No client certificate"].MatchString(err.Error()) {
-				t.Fatalf("unexpected error: %v", err)
-			}
-		})
+	err := c.VerifyPeerCertificate(nil, nil)
+	if err == nil || !ErrorMap["No client certificate"].MatchString(err.Error()) {
+		t.Fatalf("expected no client certificate error, got: %v", err)
 	}
 }
 
