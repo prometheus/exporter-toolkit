@@ -936,13 +936,15 @@ func TestVerifyPeerCertificateHandshakeWithoutClientCert(t *testing.T) {
 			return
 		}
 		defer conn.Close()
+		_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
 		r.err = conn.(*tls.Conn).Handshake()
 	}()
 
 	// Under TLS 1.3 the dial may succeed, so only check the server side.
 	clientConfig := getTLSClient("").Transport.(*http.Transport).TLSClientConfig
 	clientConfig.ServerName = "localhost"
-	clientConn, err := tls.Dial("tcp", listener.Addr().String(), clientConfig)
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	clientConn, err := tls.DialWithDialer(dialer, "tcp", listener.Addr().String(), clientConfig)
 	if err == nil {
 		_ = clientConn.Close()
 	}
