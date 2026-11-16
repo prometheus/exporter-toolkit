@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 
+	config_util "github.com/prometheus/common/config"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/time/rate"
 )
@@ -76,6 +77,23 @@ HeadersLoop:
 	return nil
 }
 
+// costliestHash returns the configured hash with the highest bcrypt cost. Ties
+// are broken by the hash itself to keep the cache key stable across requests.
+// Unparseable hashes count as cost 0, as they fail comparison immediately.
+func costliestHash(users map[string]config_util.Secret) config_util.Secret {
+	var (
+		best     config_util.Secret
+		bestCost = -1
+	)
+	for _, hash := range users {
+		cost, _ := bcrypt.Cost([]byte(hash)) // 0 if unparseable
+		if cost > bestCost || (cost == bestCost && hash < best) {
+			best, bestCost = hash, cost
+		}
+	}
+	return best
+}
+
 type webHandler struct {
 	tlsConfigPath string
 	handler       http.Handler
@@ -115,10 +133,10 @@ func (u *webHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		hashedPassword, validUser := c.Users[user]
 
 		if !validUser {
-			// The user is not found. Use a fixed password hash to
-			// prevent user enumeration by timing requests.
-			// This is a bcrypt-hashed version of "fakepassword".
-			hashedPassword = "$2y$10$QOauhQNbBCuQDKes6eFzPeMqBSjb7Mr5DUmpZ/VcEd00UAV/LDeSi"
+			// The user is not found. Compare against the costliest
+			// configured hash to prevent user enumeration by timing
+			// requests; authOk still requires validUser.
+			hashedPassword = costliestHash(c.Users)
 		}
 
 		cacheKey := strings.Join(

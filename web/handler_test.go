@@ -20,6 +20,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	config_util "github.com/prometheus/common/config"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // TestBasicAuthCache validates that the cache is working by calling a password
@@ -89,8 +92,9 @@ func TestBasicAuthCache(t *testing.T) {
 	wg.Wait()
 }
 
-// TestBasicAuthWithFakePassword validates that we can't login the "fakepassword" used in
-// to prevent user enumeration.
+// TestBasicAuthWithFakePassword validates that a user that is not configured
+// can't login with the password of the hash it is compared against to prevent
+// user enumeration.
 func TestBasicAuthWithFakepassword(t *testing.T) {
 	server := &http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -124,7 +128,7 @@ func TestBasicAuthWithFakepassword(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		req.SetBasicAuth("fakeuser", "fakepassword")
+		req.SetBasicAuth("fakeuser", "bob123")
 		r, err := client.Do(req)
 		if err != nil {
 			t.Fatal(err)
@@ -184,10 +188,11 @@ func TestByPassBasicAuthVuln(t *testing.T) {
 		}
 	}
 
-	// Poison the cache.
-	login("alice$2y$12$1DpfPeqF9HzHJt.EWswy1exHluGfbhnn3yXhR7Xes6m3WJqFg0Wby", "fakepassword")
+	// Poison the cache. The unknown user is compared against bob's hash,
+	// the most expensive one configured, and "bob123" matches it.
+	login("alice$2y$12$1DpfPeqF9HzHJt.EWswy1exHluGfbhnn3yXhR7Xes6m3WJqFg0Wby", "bob123")
 	// Login with a wrong password.
-	login("alice", "$2y$10$QOauhQNbBCuQDKes6eFzPeMqBSjb7Mr5DUmpZ/VcEd00UAV/LDeSifakepassword")
+	login("alice", "$2y$14$y7HJ017Lo/wKPDdzdHahNevjaqE.WRk3iKVLLt1yKO7RtIrNbvy6.bob123")
 }
 
 // TestHTTPHeaders validates that HTTP headers are added correctly.
@@ -253,5 +258,37 @@ func waitForPort(t *testing.T, addr string) {
 			return
 		}
 		time.Sleep(time.Millisecond * 100)
+	}
+}
+
+// TestCostliestHash checks that unknown users are compared against the most
+// expensive configured hash, so that they are never answered faster than any
+// configured user.
+func TestCostliestHash(t *testing.T) {
+	hashAtCost := func(cost int) config_util.Secret {
+		h, err := bcrypt.GenerateFromPassword([]byte("password"), cost)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return config_util.Secret(h)
+	}
+	cheap := hashAtCost(bcrypt.MinCost)
+	mid := hashAtCost(bcrypt.MinCost + 2)
+
+	for _, tc := range []struct {
+		name     string
+		users    map[string]config_util.Secret
+		expected config_util.Secret
+	}{
+		{"single user", map[string]config_util.Secret{"alice": mid}, mid},
+		{"highest cost wins", map[string]config_util.Secret{"alice": cheap, "bob": mid}, mid},
+		{"unparseable hashes rank lowest", map[string]config_util.Secret{"alice": "not a hash", "bob": cheap}, cheap},
+		{"only unparseable hashes", map[string]config_util.Secret{"alice": "not a hash"}, "not a hash"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := costliestHash(tc.users); got != tc.expected {
+				t.Errorf("costliestHash() = %q, expected %q", got, tc.expected)
+			}
+		})
 	}
 }
