@@ -26,6 +26,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -749,6 +750,23 @@ func TestTLSConfigIsEnabled(t *testing.T) {
 				t.Errorf("IsEnabled() = %v, expected %v", got, tc.expected)
 			}
 		})
+	}
+}
+
+func TestTLSConfigSetDirectory(t *testing.T) {
+	dir := t.TempDir()
+	abs := filepath.Join(dir, "abs", "server.key")
+	c := TLSConfig{TLSCertPath: "server.crt", TLSKeyPath: abs}
+	c.SetDirectory("conf")
+
+	if expected := filepath.Join("conf", "server.crt"); c.TLSCertPath != expected {
+		t.Errorf("relative TLSCertPath: got %q, expected %q", c.TLSCertPath, expected)
+	}
+	if c.TLSKeyPath != abs {
+		t.Errorf("absolute TLSKeyPath: got %q, expected %q", c.TLSKeyPath, abs)
+	}
+	if c.ClientCAs != "" {
+		t.Errorf("empty ClientCAs: got %q, expected it to stay empty", c.ClientCAs)
 	}
 }
 
