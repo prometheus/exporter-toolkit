@@ -321,7 +321,9 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 }
 
 // ServeMultiple starts the server on the given listeners. It configures the
-// server once before serving any listener.
+// server once before serving any listener. flags.WebConfigFile must be set,
+// otherwise ErrMissingFlag is returned; the listener fields of flags are not
+// used.
 func ServeMultiple(listeners []net.Listener, server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
 	if len(listeners) == 0 {
 		return errors.New("no listeners provided")
@@ -405,6 +407,8 @@ func parseVsockPort(address string) (uint32, error) {
 
 // Serve starts the server on the given listener. Based on the file path
 // WebConfigFile in the FlagConfig, TLS or basic auth could be enabled.
+// flags.WebConfigFile must be set, otherwise ErrMissingFlag is returned; the
+// listener fields of flags are not used.
 //
 // Serve changes the server configuration. Do not call it concurrently
 // for the same server or while that server is serving requests.

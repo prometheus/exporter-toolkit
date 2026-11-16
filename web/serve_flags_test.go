@@ -63,11 +63,12 @@ func TestServeRejectsIncompleteFlagConfig(t *testing.T) {
 	}
 }
 
-// TestServeDoesNotRequireListenAddresses checks that Serve accepts a
-// FlagConfig without listener fields. The caller passes the listener in, so
-// requiring them would reject a legitimate configuration.
+// TestServeDoesNotRequireListenAddresses checks that Serve and ServeMultiple
+// accept a FlagConfig without listener fields. The caller passes the listener
+// in, so requiring them would reject a legitimate configuration. It goes
+// through configureServer, the setup both share, because serving would block.
 func TestServeDoesNotRequireListenAddresses(t *testing.T) {
-	if err := (&FlagConfig{WebConfigFile: new("")}).checkWebConfigFlag(); err != nil {
-		t.Errorf("checkWebConfigFlag() = %v, expected nil", err)
+	if _, err := configureServer(&http.Server{}, &FlagConfig{WebConfigFile: new("")}, testlogger); err != nil {
+		t.Errorf("configureServer() = %v, expected nil", err)
 	}
 }
