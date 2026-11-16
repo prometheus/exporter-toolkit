@@ -240,6 +240,43 @@ func TestHTTPHeaders(t *testing.T) {
 	}
 }
 
+// TestHTTPHeadersOnRateLimitedResponse validates that the configured headers
+// are also set on responses turned away by the rate limiter.
+func TestHTTPHeadersOnRateLimitedResponse(t *testing.T) {
+	server := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Write([]byte("Hello World!"))
+		}),
+	}
+
+	addr := startTLSProtocolServer(t, server, "testdata/web_config_rate_limiter_headers.yaml")
+
+	// The burst is 1 over an interval of an hour, so the first request is
+	// served and every one after it is rate limited.
+	var r *http.Response
+	for _, want := range []int{http.StatusOK, http.StatusTooManyRequests} {
+		var err error
+		r, err = http.Get("http://" + addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.Body.Close()
+		if r.StatusCode != want {
+			t.Fatalf("got status %d, expected %d", r.StatusCode, want)
+		}
+	}
+
+	for k, v := range map[string]string{
+		"Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+		"X-Frame-Options":           "deny",
+		"Content-Security-Policy":   "default-src 'self'",
+	} {
+		if got := r.Header.Get(k); got != v {
+			t.Errorf("unexpected %s header value on rate limited response, expected %q, got %q", k, v, got)
+		}
+	}
+}
+
 func waitForPort(t *testing.T, addr string) {
 	start := time.Now()
 	for {

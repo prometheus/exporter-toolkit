@@ -95,14 +95,15 @@ func (u *webHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Configure http headers before any early return, so that every response
+	// served with a loaded config carries them, including rate limited ones.
+	for k, v := range c.HTTPConfig.Header {
+		w.Header().Set(k, v)
+	}
+
 	if u.limiter != nil && !u.limiter.Allow() {
 		http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
 		return
-	}
-
-	// Configure http headers.
-	for k, v := range c.HTTPConfig.Header {
-		w.Header().Set(k, v)
 	}
 
 	if len(c.Users) == 0 {
