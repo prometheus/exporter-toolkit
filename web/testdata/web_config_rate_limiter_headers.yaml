@@ -5,3 +5,4 @@ http_server_config:
   headers:
     X-Frame-Options: deny
     Strict-Transport-Security: max-age=31536000; includeSubDomains
+    Content-Security-Policy: "default-src 'self'"

@@ -269,6 +269,7 @@ func TestHTTPHeadersOnRateLimitedResponse(t *testing.T) {
 	for k, v := range map[string]string{
 		"Strict-Transport-Security": "max-age=31536000; includeSubDomains",
 		"X-Frame-Options":           "deny",
+		"Content-Security-Policy":   "default-src 'self'",
 	} {
 		if got := r.Header.Get(k); got != v {
 			t.Errorf("unexpected %s header value on rate limited response, expected %q, got %q", k, v, got)
