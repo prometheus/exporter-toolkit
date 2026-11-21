@@ -18,7 +18,10 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -400,5 +403,56 @@ func TestNewServerPprof(t *testing.T) {
 				t.Errorf("GET /: got %d, want %d", rec.Code, http.StatusOK)
 			}
 		})
+	}
+}
+
+func TestRunReturnsNilOnSIGTERM(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("cannot send SIGTERM to the own process on Windows")
+	}
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := l.Addr().String()
+	l.Close()
+
+	tk := New(Config{
+		App:            kingpin.New("test", ""),
+		DefaultAddress: ":9100",
+		Logger:         promslog.NewNopLogger(),
+		MetricsHandler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
+	})
+	errCh := make(chan error, 1)
+	go func() { errCh <- tk.runWithArgs([]string{"--web.listen-address=" + addr}) }()
+
+	// Wait until the server answers, so the signal handler is installed.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		resp, err := http.Get("http://" + addr + "/-/healthy")
+		if err == nil {
+			resp.Body.Close()
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("server did not start: %v", err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	p, err := os.FindProcess(os.Getpid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("expected nil after SIGTERM, got %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("server did not shut down after SIGTERM")
 	}
 }
