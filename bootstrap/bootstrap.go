@@ -30,6 +30,7 @@ import (
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	promcollectors "github.com/prometheus/client_golang/prometheus/collectors"
+	versioncollector "github.com/prometheus/client_golang/prometheus/collectors/version"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/promslog"
 	promslogflag "github.com/prometheus/common/promslog/flag"
@@ -266,6 +267,7 @@ func New(c Config) *Runner {
 	}
 
 	if c.Name != "" {
+		t.Registry.MustRegister(versioncollector.NewCollector(c.Name))
 		app.Version(version.Print(c.Name))
 	}
 	app.HelpFlag.Short('h')
