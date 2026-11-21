@@ -26,11 +26,15 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"go.yaml.in/yaml/v2"
 )
 
 var (
@@ -704,6 +708,69 @@ func TestUsers(t *testing.T) {
 	}
 	for _, testInputs := range testTables {
 		t.Run(testInputs.Name, testInputs.Test)
+	}
+}
+
+func TestConfigMarshalRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	tests := []struct {
+		name   string
+		config Config
+	}{
+		{
+			name:   "empty",
+			config: Config{},
+		},
+		{
+			name: "http2 disabled",
+			config: Config{
+				HTTPConfig: HTTPConfig{HTTP2: false, Header: map[string]string{"X-Frame-Options": "deny"}},
+			},
+		},
+		{
+			name: "tls files",
+			config: Config{
+				TLSConfig: TLSConfig{
+					TLSCertPath:              filepath.Join(dir, "server.crt"),
+					TLSKeyPath:               filepath.Join(dir, "server.key"),
+					ClientAuth:               "RequireAndVerifyClientCert",
+					ClientAllowedSans:        []string{"example.com"},
+					PreferServerCipherSuites: true,
+				},
+				HTTPConfig: HTTPConfig{HTTP2: true},
+			},
+		},
+		{
+			name: "rate limit",
+			config: Config{
+				HTTPConfig:        HTTPConfig{HTTP2: true},
+				RateLimiterConfig: RateLimiterConfig{Burst: 10, Interval: time.Second},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			out, err := yaml.Marshal(&test.config)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			path := filepath.Join(dir, strings.ReplaceAll(test.name, " ", "_")+".yml")
+			if err := os.WriteFile(path, out, 0o600); err != nil {
+				t.Fatalf("write: %v", err)
+			}
+			got, err := getConfig(path)
+			if err != nil {
+				t.Fatalf("getConfig() on marshaled config failed: %v\n%s", err, out)
+			}
+
+			want := test.config
+			want.TLSConfig.MinVersion = tls.VersionTLS12
+			want.TLSConfig.MaxVersion = tls.VersionTLS13
+			if !reflect.DeepEqual(*got, want) {
+				t.Fatalf("round trip changed the config\ngot:  %+v\nwant: %+v\nyaml:\n%s", *got, want, out)
+			}
+		})
 	}
 }
 
