@@ -15,6 +15,9 @@ package web
 
 import (
 	"errors"
+	"os"
+	"runtime"
+	"strconv"
 	"testing"
 )
 
@@ -98,5 +101,37 @@ func TestListenAndServeNoListeners(t *testing.T) {
 	}
 	if err := ListenAndServe(nil, flags, testlogger); !errors.Is(err, ErrNoListeners) {
 		t.Fatalf("ListenAndServe() = %v, want %v", err, ErrNoListeners)
+	}
+}
+
+// TestSystemdSocketsPassed checks that the systemd socket activation listeners
+// are used when systemd passed sockets to this process, even without the flag.
+func TestSystemdSocketsPassed(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("socket activation is only available on Linux")
+	}
+	flags := &FlagConfig{
+		WebSystemdSocket: new(false),
+		WebConfigFile:    new(""),
+	}
+
+	t.Setenv("LISTEN_FDS", "1")
+	t.Setenv("LISTEN_PID", strconv.Itoa(os.Getpid()))
+	if !flags.useSystemdSocket() {
+		t.Error("useSystemdSocket() = false with sockets passed to this process, want true")
+	}
+	if err := flags.checkFlags(); err != nil {
+		t.Errorf("checkFlags() = %v without listen addresses and with sockets passed, want nil", err)
+	}
+
+	t.Setenv("LISTEN_PID", strconv.Itoa(os.Getpid()+1))
+	if flags.useSystemdSocket() {
+		t.Error("useSystemdSocket() = true with sockets passed to another process, want false")
+	}
+
+	t.Setenv("LISTEN_PID", strconv.Itoa(os.Getpid()))
+	t.Setenv("LISTEN_FDS", "")
+	if flags.useSystemdSocket() {
+		t.Error("useSystemdSocket() = true without LISTEN_FDS, want false")
 	}
 }

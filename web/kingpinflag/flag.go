@@ -34,7 +34,7 @@ func AddFlags(a flagGroup, defaultAddress string) *web.FlagConfig {
 	if runtime.GOOS == "linux" {
 		systemdSocket = a.Flag(
 			"web.systemd-socket",
-			"Use systemd socket activation listeners instead of port listeners (Linux only).",
+			"Use systemd socket activation listeners instead of port listeners (Linux only). They are also used without this flag when systemd passes sockets to the process.",
 		).Bool()
 	}
 	flags := web.FlagConfig{
