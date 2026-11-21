@@ -18,7 +18,7 @@ on:
     # The branches below must be a subset of the branches above
     branches: [ master ]
   schedule:
-    - cron: '26 14 * * 1'
+    - cron: '22 13 * * 3'
 
 permissions:
   contents: read
@@ -28,8 +28,9 @@ jobs:
     name: Analyze
     runs-on: ubuntu-latest
     permissions:
-      contents: read  # for actions/checkout
-      security-events: write  # for uploading CodeQL results
+      actions: read
+      contents: read
+      security-events: write
 
     strategy:
       fail-fast: false
@@ -44,6 +45,8 @@ jobs:
       # analysis results, database bundles and logs, not the credentials file.
       - name: Checkout repository # zizmor: ignore[artipacked]
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
 
       # Initializes the CodeQL tools for scanning.
       - name: Initialize CodeQL
