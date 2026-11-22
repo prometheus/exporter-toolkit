@@ -216,7 +216,12 @@ type Runner struct {
 	MetricsHandlerFactory MetricsHandlerFactory
 
 	bootstrap *Bootstrap
+
+	landingLinks []web.LandingLinks
 }
+
+// RunnerOption provides a functional option for Runner.
+type RunnerOption func(*Runner)
 
 // addFlags adds the common exporter web flags to a Kingpin application.
 func addFlags(a *kingpin.Application, defaultAddress string) *web.FlagConfig {
@@ -224,7 +229,9 @@ func addFlags(a *kingpin.Application, defaultAddress string) *web.FlagConfig {
 }
 
 // New creates a generic exporter bootstrap instance.
-func New(c Config) *Runner {
+//
+// It takes a new bootstrap.Config as well as a number of options functions.
+func New(c Config, options ...RunnerOption) *Runner {
 	app := c.App
 	if app == nil {
 		app = kingpin.CommandLine
@@ -270,7 +277,18 @@ func New(c Config) *Runner {
 	}
 	app.HelpFlag.Short('h')
 
+	for _, o := range options {
+		o(t)
+	}
+
 	return t
+}
+
+// WithLandingLink allows adding additional links to the landing page.
+func WithLandingLink(address, text string) RunnerOption {
+	return func(s *Runner) {
+		s.landingLinks = append(s.landingLinks, web.LandingLinks{Address: address, Text: text})
+	}
 }
 
 // parse parses the provided arguments and resolves the derived bootstrap state.
@@ -425,5 +443,6 @@ func (t *Runner) defaultLandingConfig() web.LandingConfig {
 	if landingConfig.Version == "" {
 		landingConfig.Version = version.Info()
 	}
+	landingConfig.Links = t.landingLinks
 	return landingConfig
 }

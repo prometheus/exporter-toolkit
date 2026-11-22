@@ -98,7 +98,9 @@ func TestNewServerRegistersMetricsAndLandingPage(t *testing.T) {
 		MetricsHandler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			_, _ = w.Write([]byte("metrics body"))
 		}),
-	})
+	},
+		WithLandingLink("http://example.com", "Example"),
+	)
 
 	if err := tk.parse([]string{"--web.listen-address=:9100"}); err != nil {
 		t.Fatalf("unexpected parse error: %v", err)
@@ -128,8 +130,12 @@ func TestNewServerRegistersMetricsAndLandingPage(t *testing.T) {
 	if landingRec.Code != http.StatusOK {
 		t.Fatalf("unexpected landing status: got %d, want %d", landingRec.Code, http.StatusOK)
 	}
-	if body := landingRec.Body.String(); body == "" || !strings.Contains(body, "Metrics") || !strings.Contains(body, "test description") {
+	body := landingRec.Body.String()
+	if body == "" || !strings.Contains(body, "Metrics") || !strings.Contains(body, "test description") {
 		t.Fatalf("unexpected landing body: %q", body)
+	}
+	if !strings.Contains(body, "http://example.com") {
+		t.Fatalf("landing body missing example link: %q", body)
 	}
 }
 
