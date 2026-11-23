@@ -280,20 +280,6 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 		cfg.CurvePreferences = cp
 	}
 
-	if c.ClientCAs != "" {
-		clientCAPool := x509.NewCertPool()
-		clientCAFile, err := os.ReadFile(c.ClientCAs)
-		if err != nil {
-			return nil, err
-		}
-		clientCAPool.AppendCertsFromPEM(clientCAFile)
-		cfg.ClientCAs = clientCAPool
-	} else if c.ClientCAsText != "" {
-		clientCAPool := x509.NewCertPool()
-		clientCAPool.AppendCertsFromPEM([]byte(c.ClientCAsText))
-		cfg.ClientCAs = clientCAPool
-	}
-
 	if c.ClientAllowedSans != nil {
 		// verify that the client cert contains an allowed SAN
 		cfg.VerifyPeerCertificate = c.VerifyPeerCertificate
@@ -312,6 +298,26 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 		cfg.ClientAuth = tls.NoClientCert
 	default:
 		return nil, errors.New("invalid ClientAuth: " + c.ClientAuth)
+	}
+
+	if c.ClientCAs != "" || c.ClientCAsText != "" {
+		clientCAPEM, clientCASource := []byte(c.ClientCAsText), "client_ca"
+		if c.ClientCAs != "" {
+			b, err := os.ReadFile(c.ClientCAs)
+			if err != nil {
+				return nil, err
+			}
+			clientCAPEM, clientCASource = b, fmt.Sprintf("client_ca_file (%s)", c.ClientCAs)
+		}
+		clientCAPool := x509.NewCertPool()
+		// An empty pool only matters to policies that verify client
+		// certificates against it; for the others it is merely a hint.
+		verifiesClientCerts := cfg.ClientAuth == tls.VerifyClientCertIfGiven ||
+			cfg.ClientAuth == tls.RequireAndVerifyClientCert
+		if !clientCAPool.AppendCertsFromPEM(clientCAPEM) && verifiesClientCerts {
+			return nil, fmt.Errorf("no client CA certificates found in %s", clientCASource)
+		}
+		cfg.ClientCAs = clientCAPool
 	}
 
 	if (c.ClientCAs != "" || c.ClientCAsText != "") && cfg.ClientAuth == tls.NoClientCert {

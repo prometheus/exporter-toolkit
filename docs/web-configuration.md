@@ -55,6 +55,9 @@ tls_server_config:
   [ client_auth_type: <string> | default = "NoClientCert" ]
 
   # CA certificate for client certificate authentication to the server.
+  # The file must contain at least one PEM encoded certificate when
+  # client_auth_type is VerifyClientCertIfGiven or RequireAndVerifyClientCert,
+  # otherwise the configuration is rejected.
   [ client_ca_file: <filename> ]
 
   # Verify that the client certificate has a Subject Alternate Name (SAN)

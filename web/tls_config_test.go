@@ -49,6 +49,8 @@ var (
 		"Invalid Cert or CertPath":     regexp.MustCompile(`missing one of cert or cert_file`),
 		"Invalid Key or KeyPath":       regexp.MustCompile(`missing one of key or key_file`),
 		"ClientCA set without policy":  regexp.MustCompile(`client CA's have been configured without a Client Auth Policy`),
+		"No client CA file certs":      regexp.MustCompile(`no client CA certificates found in client_ca_file \(testdata/tls-ca-chain-nocerts\.pem\)`),
+		"No inline client CA certs":    regexp.MustCompile(`no client CA certificates found in client_ca$`),
 		"Bad password":                 regexp.MustCompile(`hashedSecret too short to be a bcrypted password`),
 		"Unauthorized":                 regexp.MustCompile(`Unauthorized`),
 		"Forbidden":                    regexp.MustCompile(`Forbidden`),
@@ -169,6 +171,16 @@ func TestYAMLFiles(t *testing.T) {
 			ExpectedError:  ErrorMap["No such file"],
 		},
 		{
+			Name:           `invalid config yml (client CA file without certificates)`,
+			YAMLConfigPath: "testdata/web_config_auth_clientCAs_nocerts.bad.yml",
+			ExpectedError:  ErrorMap["No client CA file certs"],
+		},
+		{
+			Name:           `invalid config yml (inline client CA without certificates)`,
+			YAMLConfigPath: "testdata/web_config_auth_clientCAsText_nocerts.bad.yml",
+			ExpectedError:  ErrorMap["No inline client CA certs"],
+		},
+		{
 			Name:           `invalid config yml (invalid user list)`,
 			YAMLConfigPath: "testdata/web_config_auth_user_list_invalid.bad.yml",
 			ExpectedError:  ErrorMap["Bad password"],
@@ -192,6 +204,25 @@ func TestYAMLFiles(t *testing.T) {
 	for _, testInputs := range testTables {
 		t.Run("run/"+testInputs.Name, testInputs.Test)
 		t.Run("validate/"+testInputs.Name, testInputs.TestValidate)
+	}
+}
+
+// TestClientCAWithoutCertificatesUnverified checks that a client CA holding no
+// certificates is only rejected by client auth policies that verify client
+// certificates against it.
+func TestClientCAWithoutCertificatesUnverified(t *testing.T) {
+	for _, clientAuth := range []string{"RequestClientCert", "RequireAnyClientCert"} {
+		t.Run(clientAuth, func(t *testing.T) {
+			c := &TLSConfig{
+				TLSCertPath:   "testdata/server.crt",
+				TLSKeyPath:    "testdata/server.key",
+				ClientAuth:    clientAuth,
+				ClientCAsText: "this is not a PEM encoded certificate",
+			}
+			if _, err := ConfigToTLSConfig(c); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
 	}
 }
 
