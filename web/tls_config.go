@@ -14,6 +14,7 @@
 package web
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -27,6 +28,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coreos/go-systemd/v22/activation"
@@ -168,11 +170,60 @@ type RateLimiterConfig struct {
 	Interval time.Duration `yaml:"interval"`
 }
 
+// configCache memoizes parsed configuration files. The file is read on every
+// request so that changes are picked up without a restart, but parsing it each
+// time is by far the most expensive part of serving one. An entry is reused only
+// while the file content is byte-for-byte identical to what it was parsed from.
+//
+// There is one entry per configuration path, which is replaced when the file
+// changes. Entries are never removed, so the cache holds one configuration for
+// every path that was ever read successfully; in practice that is the one or
+// few configuration files a process serves with.
+type configCache struct {
+	mtx     sync.RWMutex
+	entries map[string]configCacheEntry
+}
+
+type configCacheEntry struct {
+	content []byte
+	config  Config
+}
+
+var parsedConfigs = &configCache{entries: make(map[string]configCacheEntry)}
+
+// get returns the cached configuration for path if it was parsed from the same
+// content. It returns a copy so that a caller cannot change what the next one
+// sees. The maps and slices inside are shared, and are only ever read.
+func (c *configCache) get(path string, content []byte) *Config {
+	c.mtx.RLock()
+	entry, ok := c.entries[path]
+	c.mtx.RUnlock()
+
+	// Entries are never modified once stored, so the comparison does not need
+	// to hold the lock.
+	if !ok || !bytes.Equal(entry.content, content) {
+		return nil
+	}
+	config := entry.config
+	return &config
+}
+
+func (c *configCache) set(path string, content []byte, config Config) {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	c.entries[path] = configCacheEntry{content: content, config: config}
+}
+
 func getConfig(configPath string) (*Config, error) {
 	content, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, err
 	}
+	if c := parsedConfigs.get(configPath, content); c != nil {
+		return c, nil
+	}
+
 	c := &Config{
 		TLSConfig: TLSConfig{
 			MinVersion:               tls.VersionTLS12,
@@ -186,7 +237,14 @@ func getConfig(configPath string) (*Config, error) {
 		err = validateHeaderConfig(c.HTTPConfig.Header)
 	}
 	c.TLSConfig.SetDirectory(filepath.Dir(configPath))
-	return c, err
+	if err != nil {
+		// A file that does not parse is not cached, so that the error is
+		// reported again for every request until it is fixed.
+		return c, err
+	}
+
+	parsedConfigs.set(configPath, content, *c)
+	return c, nil
 }
 
 func getTLSConfig(configPath string) (*tls.Config, error) {
