@@ -20,22 +20,22 @@ package web
 import (
 	"bytes"
 	_ "embed"
+	"html/template"
 	"net/http"
 	"strings"
-	"text/template"
 )
 
 // Config represents the configuration of the web listener.
 type LandingConfig struct {
 	RoutePrefix string         // The route prefix for the exporter.
 	HeaderColor string         // Used for the landing page header.
-	CSS         string         // CSS style tag for the landing page.
+	CSS         template.CSS   // CSS style tag for the landing page.
 	Name        string         // The name of the exporter, generally suffixed by _exporter.
 	Description string         // A short description about the exporter.
 	Form        LandingForm    // A POST form.
 	Links       []LandingLinks // Links displayed on the landing page.
-	ExtraHTML   string         // Additional HTML to be embedded.
-	ExtraCSS    string         // Additional CSS to be embedded.
+	ExtraHTML   template.HTML  // Additional HTML to be embedded.
+	ExtraCSS    template.CSS   // Additional CSS to be embedded.
 	Version     string         // The version displayed.
 	Profiling   string         // If false, don't display profiling links.
 }
@@ -75,8 +75,6 @@ var (
 )
 
 func NewLandingPage(c LandingConfig) (*LandingPageHandler, error) {
-	var buf bytes.Buffer
-
 	c.Form.Action = strings.TrimPrefix(c.Form.Action, "/")
 
 	length := 0
@@ -87,16 +85,9 @@ func NewLandingPage(c LandingConfig) (*LandingPageHandler, error) {
 		}
 	}
 	c.Form.Width = (float64(length) + 1) / 2
-	if c.CSS == "" {
-		if c.HeaderColor == "" {
-			// Default to Prometheus orange.
-			c.HeaderColor = "#e6522c"
-		}
-		cssTemplate := template.Must(template.New("landing css").Parse(landingPagecssContent))
-		if err := cssTemplate.Execute(&buf, c); err != nil {
-			return nil, err
-		}
-		c.CSS = buf.String()
+	if c.HeaderColor == "" {
+		// Default to Prometheus orange.
+		c.HeaderColor = "#e6522c"
 	}
 	if c.RoutePrefix == "" {
 		c.RoutePrefix = "/"
@@ -107,13 +98,24 @@ func NewLandingPage(c LandingConfig) (*LandingPageHandler, error) {
 	if c.Profiling == "" {
 		c.Profiling = "true"
 	}
-	// Strip leading '/' from Links if present
-	for i, link := range c.Links {
-		c.Links[i].Address = strings.TrimPrefix(link.Address, "/")
+	// Resolve link and form targets against the route prefix here rather than
+	// in the template: html/template only accepts the URL as safe when it sees
+	// it whole. Copy the links so the caller's slice is left untouched.
+	if c.Form.Action != "" {
+		c.Form.Action = c.RoutePrefix + c.Form.Action
 	}
+	links := make([]LandingLinks, len(c.Links))
+	for i, link := range c.Links {
+		link.Address = c.RoutePrefix + strings.TrimPrefix(link.Address, "/")
+		links[i] = link
+	}
+	c.Links = links
 	t := template.Must(template.New("landing page").Parse(landingPagehtmlContent))
+	// The default stylesheet is rendered inside the page's <style> element,
+	// so html/template escapes the values it interpolates for CSS.
+	template.Must(t.New("landing css").Parse(landingPagecssContent))
 
-	buf.Reset()
+	var buf bytes.Buffer
 	if err := t.Execute(&buf, c); err != nil {
 		return nil, err
 	}
