@@ -80,14 +80,21 @@ type FlagConfig struct {
 	WebConfigFile *string
 }
 
+// checkWebConfigFlag validates that the flag configuration contains the web
+// config field. Serve and ServeMultiple only need this much, because their
+// caller supplies the listeners.
+func (c *FlagConfig) checkWebConfigFlag() error {
+	if c == nil || c.WebConfigFile == nil {
+		return ErrMissingFlag
+	}
+	return nil
+}
+
 // checkFlags validates that the flag configuration contains the required
 // listener and web config fields needed by the web package.
 func (c *FlagConfig) checkFlags() error {
-	if c == nil {
-		return ErrMissingFlag
-	}
-	if c.WebConfigFile == nil {
-		return ErrMissingFlag
+	if err := c.checkWebConfigFlag(); err != nil {
+		return err
 	}
 	// Listen addresses are only optional when systemd socket activation is
 	// actually enabled. Checking that WebSystemdSocket is non-nil is not
@@ -322,7 +329,9 @@ func ConfigToTLSConfig(c *TLSConfig) (*tls.Config, error) {
 }
 
 // ServeMultiple starts the server on the given listeners. It configures the
-// server once before serving any listener.
+// server once before serving any listener. flags.WebConfigFile must be set,
+// otherwise ErrMissingFlag is returned; the listener fields of flags are not
+// used.
 func ServeMultiple(listeners []net.Listener, server *http.Server, flags *FlagConfig, logger *slog.Logger) error {
 	if len(listeners) == 0 {
 		return errors.New("no listeners provided")
@@ -406,6 +415,8 @@ func parseVsockPort(address string) (uint32, error) {
 
 // Serve starts the server on the given listener. Based on the file path
 // WebConfigFile in the FlagConfig, TLS or basic auth could be enabled.
+// flags.WebConfigFile must be set, otherwise ErrMissingFlag is returned; the
+// listener fields of flags are not used.
 //
 // Serve changes the server configuration. Do not call it concurrently
 // for the same server or while that server is serving requests.
@@ -421,6 +432,9 @@ func Serve(l net.Listener, server *http.Server, flags *FlagConfig, logger *slog.
 }
 
 func configureServer(server *http.Server, flags *FlagConfig, logger *slog.Logger) (*HTTPConfig, error) {
+	if err := flags.checkWebConfigFlag(); err != nil {
+		return nil, err
+	}
 	setErrorLog(server, logger)
 	tlsConfigPath := *flags.WebConfigFile
 	if tlsConfigPath == "" {

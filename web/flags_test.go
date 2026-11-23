@@ -15,6 +15,8 @@ package web
 
 import (
 	"errors"
+	"net"
+	"net/http"
 	"testing"
 )
 
@@ -98,5 +100,43 @@ func TestListenAndServeNoListeners(t *testing.T) {
 	}
 	if err := ListenAndServe(nil, flags, testlogger); !errors.Is(err, ErrNoListeners) {
 		t.Fatalf("ListenAndServe() = %v, want %v", err, ErrNoListeners)
+	}
+}
+
+// TestServeRejectsIncompleteFlagConfig checks that Serve and ServeMultiple
+// report an incomplete FlagConfig instead of dereferencing a nil field. They
+// are exported for callers that create their own listeners, and those callers
+// build a FlagConfig by hand rather than getting one from kingpinflag. The
+// listeners are nil because the flag check fails before they are used.
+func TestServeRejectsIncompleteFlagConfig(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		flags *FlagConfig
+	}{
+		{name: "nil FlagConfig", flags: nil},
+		{name: "no WebConfigFile", flags: &FlagConfig{}},
+		{name: "no WebConfigFile with listen addresses", flags: &FlagConfig{
+			WebListenAddresses: &[]string{"localhost:0"},
+			WebSystemdSocket:   new(false),
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := Serve(nil, &http.Server{}, tc.flags, testlogger); !errors.Is(err, ErrMissingFlag) {
+				t.Errorf("Serve() = %v, want %v", err, ErrMissingFlag)
+			}
+			if err := ServeMultiple(make([]net.Listener, 1), &http.Server{}, tc.flags, testlogger); !errors.Is(err, ErrMissingFlag) {
+				t.Errorf("ServeMultiple() = %v, want %v", err, ErrMissingFlag)
+			}
+		})
+	}
+}
+
+// TestServeDoesNotRequireListenAddresses checks that Serve and ServeMultiple
+// accept a FlagConfig without listener fields. The caller passes the listener
+// in, so requiring them would reject a legitimate configuration. It goes
+// through configureServer, the setup both share, because serving would block.
+func TestServeDoesNotRequireListenAddresses(t *testing.T) {
+	if _, err := configureServer(&http.Server{}, &FlagConfig{WebConfigFile: new("")}, testlogger); err != nil {
+		t.Errorf("configureServer() = %v, want nil", err)
 	}
 }
