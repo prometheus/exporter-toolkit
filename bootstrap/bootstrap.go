@@ -379,10 +379,20 @@ func (t *Runner) newServer(metricsHandler http.Handler) (*http.Server, error) {
 
 	if metricsPath != "/" && !rootOverridden {
 		landingConfig := t.LandingConfig
-		landingConfig.Links = append(landingConfig.Links, web.LandingLinks{
-			Address: metricsPath,
-			Text:    "Metrics",
-		})
+		landingConfig.Links = append(landingConfig.Links,
+			web.LandingLinks{
+				Address: metricsPath,
+				Text:    "Metrics",
+			},
+			web.LandingLinks{
+				Address: "/-/healthy",
+				Text:    "Healthy",
+			},
+			web.LandingLinks{
+				Address: "/-/ready",
+				Text:    "Ready",
+			},
+		)
 		landingPage, err := web.NewLandingPage(landingConfig)
 		if err != nil {
 			return nil, err
